@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Effects Lab</title>
+  <link rel="stylesheet" href="lab.css">
+</head>
+<body>
+  <main class="lab">
+    <div class="stage"><canvas id="stage"></canvas></div>
+    <aside class="panel">
+      <h1>Effects lab</h1>
+      <p class="hint">Fight animations in a dark dungeon room, rolled by the rules. Click a figure to target it.</p>
+
+      <section>
+        <h2>Who</h2>
+        <label>Caster <select id="caster"></select></label>
+        <label>Target <select id="target"></select></label>
+      </section>
+
+      <section>
+        <h2>Rolls</h2>
+        <div class="segmented" id="outcome">
+          <button data-v="dice" class="on">Dice</button>
+          <button data-v="hit">Hit</button>
+          <button data-v="miss">Miss</button>
+          <button data-v="crit">Crit</button>
+        </div>
+        <div class="segmented" id="mode">
+          <button data-v="normal" class="on">Normal</button>
+          <button data-v="adv">Advantage</button>
+          <button data-v="dis">Disadvantage</button>
+        </div>
+        <p class="hint">Dice: the rules roll. Hit, Miss, Crit: force an outcome to check an effect.</p>
+      </section>
+
+      <section>
+        <h2>Effects</h2>
+        <div class="effects" id="effects"></div>
+      </section>
+
+      <section>
+        <h2>View</h2>
+        <div class="segmented" id="speed">
+          <button data-v="1" class="on">1×</button>
+          <button data-v="0.25">0.25×</button>
+        </div>
+        <label class="check"><input type="checkbox" id="dice" checked> Dice tray</label>
+        <label class="check"><input type="checkbox" id="names" checked> Names</label>
+        <label class="check"><input type="checkbox" id="grid"> Grid</label>
+        <button id="reset" class="plain">Reset (revive everyone, clear marks)</button>
+      </section>
+
+      <section>
+        <h2>Log</h2>
+        <ol class="log" id="log"></ol>
+      </section>
+
+      <p class="hint" id="status"></p>
+    </aside>
+  </main>
+
+  <!-- Map editor modules (drawing only: no editor UI, no autosave). -->
+  <script src="../../map-editor/js/core/random.js"></script>
+  <script src="../../map-editor/js/core/grid.js"></script>
+  <script src="../../map-editor/js/core/colors.js"></script>
+  <script src="../../map-editor/js/model/constants.js"></script>
+  <script src="../../map-editor/js/model/map.js"></script>
+  <script src="../../map-editor/js/render/rivers.js"></script>
+  <script src="../../map-editor/js/render/resolve.js"></script>
+  <script src="../../map-editor/js/render/characterArt.js"></script>
+  <script src="../../map-editor/js/render/villagers.js"></script>
+  <script src="../../map-editor/js/render/monsters.js"></script>
+  <script src="../../map-editor/js/render/props.js"></script>
+  <script src="../../map-editor/js/render/houseKit.js"></script>
+  <script src="../../map-editor/js/render/houses.js"></script>
+  <script src="../../map-editor/js/render/landmarks.js"></script>
+  <script src="../../map-editor/js/render/structures.js"></script>
+  <script src="../../map-editor/js/render/sprites.js"></script>
+  <script src="../../map-editor/js/render/details.js"></script>
+  <script src="../../map-editor/js/render/ground.js"></script>
+  <script src="../../map-editor/js/render/water.js"></script>
+  <script src="../../map-editor/js/render/bridges.js"></script>
+  <script src="../../map-editor/js/render/height.js"></script>
+  <script src="../../map-editor/js/render/daylight.js"></script>
+  <script src="../../map-editor/js/render/life.js"></script>
+  <script src="../../map-editor/js/render/fire.js"></script>
+  <script src="../../map-editor/js/render/weather.js"></script>
+  <script src="../../map-editor/js/render/actors.js"></script>
+  <script src="../../map-editor/js/render/animals.js"></script>
+  <script src="../../map-editor/js/render/tracks.js"></script>
+  <script src="../../map-editor/js/render/doors.js"></script>
+  <script src="../../map-editor/js/render/stages.js"></script>
+  <script src="../../map-editor/js/gl/context.js"></script>
+  <script src="../../map-editor/js/gl/chunks.js"></script>
+  <script src="../../map-editor/js/gl/shaders.js"></script>
+  <script src="../../map-editor/js/gl/textures.js"></script>
+  <script src="../../map-editor/js/gl/world.js"></script>
+  <script src="../../map-editor/js/gl/frame.js"></script>
+  <script src="../../map-editor/js/gl/atlas.js"></script>
+  <script src="../../map-editor/js/gl/ground.js"></script>
+  <script src="../../map-editor/js/gl/screen.js"></script>
+  <script src="../../map-editor/js/gl/passes/static.js"></script>
+  <script src="../../map-editor/js/gl/passes/tint.js"></script>
+  <script src="../../map-editor/js/gl/passes/floor.js"></script>
+  <script src="../../map-editor/js/gl/passes/lights.js"></script>
+  <script src="../../map-editor/js/gl/passes/glow.js"></script>
+  <script src="../../map-editor/js/gl/passes/smoke.js"></script>
+  <script src="../../map-editor/js/gl/passes/life.js"></script>
+  <script src="../../map-editor/js/gl/passes/weather.js"></script>
+  <script src="../../map-editor/js/gl/passes/sprites.js"></script>
+  <script src="../../map-editor/js/gl/passes/water.js"></script>
+  <script src="../../map-editor/js/gl/passes/bridges.js"></script>
+  <script src="../../map-editor/js/gl/passes/tracks.js"></script>
+  <script src="../../map-editor/js/gl/passes/height.js"></script>
+
+  <!-- Game. -->
+  <script src="../../dnd-game/js/rules/dice.js"></script>
+  <script src="../../dnd-game/js/rules/creatures.js"></script>
+  <script src="../../dnd-game/js/rules/actions.js"></script>
+  <script src="../../dnd-game/js/rules/conditions.js"></script>
+  <script src="../../dnd-game/js/rules/rules.js"></script>
+  <script src="../../dnd-game/js/art/heroes.js"></script>
+  <script src="../../dnd-game/js/art/poses.js"></script>
+  <script src="../../dnd-game/js/stage.js"></script>
+  <script src="../../dnd-game/js/figures.js"></script>
+  <script src="../../dnd-game/js/fx/palette.js"></script>
+  <script src="../../dnd-game/js/fx/particles.js"></script>
+  <script src="../../dnd-game/js/fx/marks.js"></script>
+  <script src="../../dnd-game/js/fx/popups.js"></script>
+  <script src="../../dnd-game/js/fx/shapes.js"></script>
+  <script src="../../dnd-game/js/fx/glow.js"></script>
+  <script src="../../dnd-game/js/fx/arcs.js"></script>
+  <script src="../../dnd-game/js/fx/volumes.js"></script>
+  <script src="../../dnd-game/js/fx/ropes.js"></script>
+  <script src="../../dnd-game/js/fx/projectiles.js"></script>
+  <script src="../../dnd-game/js/fx/blades.js"></script>
+  <script src="../../dnd-game/js/fx/deaths.js"></script>
+  <script src="../../dnd-game/js/fx/fx.js"></script>
+  <script src="../../dnd-game/js/fx/spells.js"></script>
+  <script src="../../dnd-game/js/fx/looks/signature.js"></script>
+  <script src="../../dnd-game/js/fx/looks/wizardBlast.js"></script>
+  <script src="../../dnd-game/js/fx/looks/wizardMagic.js"></script>
+  <script src="../../dnd-game/js/fx/looks/cleric.js"></script>
+  <script src="../../dnd-game/js/fx/looks/martial.js"></script>
+  <script src="../../dnd-game/js/ui/diceTray.js"></script>
+  <script src="lab.js"></script>
+</body>
+</html>

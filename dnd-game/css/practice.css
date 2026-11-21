@@ -1,0 +1,9 @@
+/* Practice room: the fight page's look, plus the hero picker. */
+.picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.picker button { flex: 1 1 30%; }
+.side .row { margin-top: 10px; }
+.side .row button { width: 100%; }
+/* The practice wizard has over 20 actions: smaller buttons, and the bar scrolls rather than cover the room. */
+.actions { max-height: 40%; overflow-y: auto; }
+.actions .buttons button { padding: 3px 7px; font-size: 12px; }
+.picker.levels button { flex: 1 1 0; }

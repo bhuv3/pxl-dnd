@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Adventure editor</title>
+  <link rel="stylesheet" href="css/fight.css">
+  <link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+  <main class="fight">
+    <div class="stage">
+      <canvas id="stage"></canvas>
+      <div class="toolbar" id="tools"></div>
+      <p class="status" id="status"></p>
+    </div>
+    <aside class="side editor">
+      <div class="file">
+        <button id="new">New</button>
+        <button id="open">Open file…</button>
+        <select id="known"></select>
+        <button id="export" class="end">Export</button>
+        <input type="file" id="openFile" accept=".js" hidden>
+        <input type="file" id="mapFile" accept=".json" hidden>
+      </div>
+      <div class="play"><button id="playStart">▶ Play from start</button><button id="playMap">▶ Play this map</button></div>
+      <div class="scroll">
+        <details open><summary>Adventure</summary><div id="adventure"></div></details>
+        <details open><summary>Maps</summary><div id="maps"></div></details>
+        <details open><summary>Selected</summary><div id="selected"></div></details>
+        <details><summary>Groups on this map</summary><div id="groups"></div></details>
+        <details open><summary>Problems</summary><ul class="problems" id="problems"></ul></details>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Map editor modules (drawing only: no editor UI, no autosave). -->
+  <script src="../map-editor/js/core/random.js"></script>
+  <script src="../map-editor/js/core/grid.js"></script>
+  <script src="../map-editor/js/core/colors.js"></script>
+  <script src="../map-editor/js/model/constants.js"></script>
+  <script src="../map-editor/js/model/map.js"></script>
+  <script src="../map-editor/js/model/generate.js"></script>
+  <script src="../map-editor/js/render/rivers.js"></script>
+  <script src="../map-editor/js/render/resolve.js"></script>
+  <script src="../map-editor/js/render/characterArt.js"></script>
+  <script src="../map-editor/js/render/villagers.js"></script>
+  <script src="../map-editor/js/render/monsters.js"></script>
+  <script src="../map-editor/js/render/props.js"></script>
+  <script src="../map-editor/js/render/houseKit.js"></script>
+  <script src="../map-editor/js/render/houses.js"></script>
+  <script src="../map-editor/js/render/landmarks.js"></script>
+  <script src="../map-editor/js/render/structures.js"></script>
+  <script src="../map-editor/js/render/sprites.js"></script>
+  <script src="../map-editor/js/render/details.js"></script>
+  <script src="../map-editor/js/render/ground.js"></script>
+  <script src="../map-editor/js/render/water.js"></script>
+  <script src="../map-editor/js/render/bridges.js"></script>
+  <script src="../map-editor/js/render/height.js"></script>
+  <script src="../map-editor/js/render/daylight.js"></script>
+  <script src="../map-editor/js/render/life.js"></script>
+  <script src="../map-editor/js/render/fire.js"></script>
+  <script src="../map-editor/js/render/weather.js"></script>
+  <script src="../map-editor/js/render/actors.js"></script>
+  <script src="../map-editor/js/render/animals.js"></script>
+  <script src="../map-editor/js/render/tracks.js"></script>
+  <script src="../map-editor/js/render/doors.js"></script>
+  <script src="../map-editor/js/render/stages.js"></script>
+  <script src="../map-editor/js/gl/context.js"></script>
+  <script src="../map-editor/js/gl/chunks.js"></script>
+  <script src="../map-editor/js/gl/shaders.js"></script>
+  <script src="../map-editor/js/gl/textures.js"></script>
+  <script src="../map-editor/js/gl/world.js"></script>
+  <script src="../map-editor/js/gl/frame.js"></script>
+  <script src="../map-editor/js/gl/atlas.js"></script>
+  <script src="../map-editor/js/gl/ground.js"></script>
+  <script src="../map-editor/js/gl/screen.js"></script>
+  <script src="../map-editor/js/gl/passes/static.js"></script>
+  <script src="../map-editor/js/gl/passes/tint.js"></script>
+  <script src="../map-editor/js/gl/passes/floor.js"></script>
+  <script src="../map-editor/js/gl/passes/lights.js"></script>
+  <script src="../map-editor/js/gl/passes/glow.js"></script>
+  <script src="../map-editor/js/gl/passes/smoke.js"></script>
+  <script src="../map-editor/js/gl/passes/life.js"></script>
+  <script src="../map-editor/js/gl/passes/weather.js"></script>
+  <script src="../map-editor/js/gl/passes/sprites.js"></script>
+  <script src="../map-editor/js/gl/passes/water.js"></script>
+  <script src="../map-editor/js/gl/passes/bridges.js"></script>
+  <script src="../map-editor/js/gl/passes/tracks.js"></script>
+  <script src="../map-editor/js/gl/passes/height.js"></script>
+
+  <!-- Game (drawing and data only: no exploring or fights here). -->
+  <script src="js/rules/dice.js"></script>
+  <script src="js/rules/creatures.js"></script>
+  <script src="js/rules/actions.js"></script>
+  <script src="js/rules/conditions.js"></script>
+  <script src="js/art/heroes.js"></script>
+  <script src="js/art/poses.js"></script>
+  <script src="js/stage.js"></script>
+  <script src="js/figures.js"></script>
+  <script src="js/fx/palette.js"></script>
+  <script src="js/fx/particles.js"></script>
+  <script src="js/fx/marks.js"></script>
+  <script src="js/fx/popups.js"></script>
+  <script src="js/fx/shapes.js"></script>
+  <script src="js/fx/deaths.js"></script>
+  <script src="js/combat/squares.js"></script>
+  <script src="js/adventure/adventures.js"></script>
+  <script src="adventures/cellar-key.js"></script>
+  <script src="js/adventure/maps.js"></script>
+
+  <!-- Adventure editor. -->
+  <script src="js/editor/advFile.js"></script>
+  <script src="js/editor/view.js"></script>
+  <script src="js/editor/panel.js"></script>
+  <script src="js/editor/editor.js"></script>
+</body>
+</html>

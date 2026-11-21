@@ -1,0 +1,29 @@
+/* Adventure editor: the fight page's look, with a tool bar over the map and forms in the side panel. */
+.side.editor { width: 360px; padding: 12px; gap: 8px; }
+.file, .play { display: flex; gap: 6px; flex-wrap: wrap; }
+.file select { flex: 1; min-width: 0; }
+.play button { flex: 1; border-color: var(--accent); }
+.scroll { flex: 1; overflow-y: auto; min-height: 0; margin: 0 -12px; padding: 0 12px; }
+details { border-top: 1px solid var(--line); padding: 6px 0; }
+summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 4px 0; }
+
+.field { display: grid; grid-template-columns: 96px 1fr; gap: 6px; align-items: center; margin: 5px 0; font-size: 13px; }
+.field > span { color: var(--muted); }
+.field.wide { grid-template-columns: 1fr; }
+input, select, textarea { font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; min-width: 0; width: 100%; }
+input[type=checkbox] { width: auto; }
+textarea { resize: vertical; min-height: 54px; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.note { color: var(--muted); font-size: 12px; margin: 4px 0; }
+.maplist { list-style: none; margin: 0 0 6px; padding: 0; }
+.maplist li { display: flex; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 4px; cursor: pointer; }
+.maplist li.on { background: var(--on); }
+.maplist li small { color: var(--muted); margin-left: auto; }
+.problems { margin: 0; padding-left: 18px; font-size: 12px; color: #ffb36b; }
+.problems li.ok { color: #8fd27a; list-style: none; margin-left: -18px; }
+.problems li { cursor: pointer; }
+
+.toolbar { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); background: rgba(28, 25, 34, 0.9); border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+.toolbar button { padding: 4px 8px; font-size: 12px; }
+.status { position: absolute; left: 10px; bottom: 8px; margin: 0; font-size: 12px; color: var(--muted); background: rgba(18, 16, 22, 0.75); padding: 2px 8px; border-radius: 8px; }
+.status:empty { display: none; }

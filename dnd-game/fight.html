@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Goblin Fight</title>
+  <link rel="stylesheet" href="css/fight.css">
+</head>
+<body>
+  <main class="fight">
+    <div class="stage">
+      <canvas id="stage"></canvas>
+      <div class="turnbar" id="turnbar"></div>
+      <div class="banner" id="banner"></div>
+      <div class="actions" id="actions" hidden></div>
+      <div class="result" id="result" hidden></div>
+    </div>
+    <aside class="side">
+      <h1>Goblin fight</h1>
+      <p class="hint" id="hint"></p>
+      <h2>Log</h2>
+      <ol class="log" id="log"></ol>
+      <label class="check">Heroes at <select id="level"></select></label>
+      <label class="check"><input type="checkbox" id="speed"> Fast animations</label>
+      <p class="credit">This work includes material from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at <a href="https://www.dndbeyond.com/srd" target="_blank" rel="noopener">https://www.dndbeyond.com/srd</a>. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at <a href="https://creativecommons.org/licenses/by/4.0/legalcode" target="_blank" rel="noopener">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>
+    </aside>
+  </main>
+
+  <!-- Map editor modules (drawing only: no editor UI, no autosave). -->
+  <script src="../map-editor/js/core/random.js"></script>
+  <script src="../map-editor/js/core/grid.js"></script>
+  <script src="../map-editor/js/core/colors.js"></script>
+  <script src="../map-editor/js/model/constants.js"></script>
+  <script src="../map-editor/js/model/map.js"></script>
+  <script src="../map-editor/js/render/rivers.js"></script>
+  <script src="../map-editor/js/render/resolve.js"></script>
+  <script src="../map-editor/js/render/characterArt.js"></script>
+  <script src="../map-editor/js/render/villagers.js"></script>
+  <script src="../map-editor/js/render/monsters.js"></script>
+  <script src="../map-editor/js/render/props.js"></script>
+  <script src="../map-editor/js/render/houseKit.js"></script>
+  <script src="../map-editor/js/render/houses.js"></script>
+  <script src="../map-editor/js/render/landmarks.js"></script>
+  <script src="../map-editor/js/render/structures.js"></script>
+  <script src="../map-editor/js/render/sprites.js"></script>
+  <script src="../map-editor/js/render/details.js"></script>
+  <script src="../map-editor/js/render/ground.js"></script>
+  <script src="../map-editor/js/render/water.js"></script>
+  <script src="../map-editor/js/render/bridges.js"></script>
+  <script src="../map-editor/js/render/height.js"></script>
+  <script src="../map-editor/js/render/daylight.js"></script>
+  <script src="../map-editor/js/render/life.js"></script>
+  <script src="../map-editor/js/render/fire.js"></script>
+  <script src="../map-editor/js/render/weather.js"></script>
+  <script src="../map-editor/js/render/actors.js"></script>
+  <script src="../map-editor/js/render/animals.js"></script>
+  <script src="../map-editor/js/render/tracks.js"></script>
+  <script src="../map-editor/js/render/doors.js"></script>
+  <script src="../map-editor/js/render/stages.js"></script>
+  <script src="../map-editor/js/gl/context.js"></script>
+  <script src="../map-editor/js/gl/chunks.js"></script>
+  <script src="../map-editor/js/gl/shaders.js"></script>
+  <script src="../map-editor/js/gl/textures.js"></script>
+  <script src="../map-editor/js/gl/world.js"></script>
+  <script src="../map-editor/js/gl/frame.js"></script>
+  <script src="../map-editor/js/gl/atlas.js"></script>
+  <script src="../map-editor/js/gl/ground.js"></script>
+  <script src="../map-editor/js/gl/screen.js"></script>
+  <script src="../map-editor/js/gl/passes/static.js"></script>
+  <script src="../map-editor/js/gl/passes/tint.js"></script>
+  <script src="../map-editor/js/gl/passes/floor.js"></script>
+  <script src="../map-editor/js/gl/passes/lights.js"></script>
+  <script src="../map-editor/js/gl/passes/glow.js"></script>
+  <script src="../map-editor/js/gl/passes/smoke.js"></script>
+  <script src="../map-editor/js/gl/passes/life.js"></script>
+  <script src="../map-editor/js/gl/passes/weather.js"></script>
+  <script src="../map-editor/js/gl/passes/sprites.js"></script>
+  <script src="../map-editor/js/gl/passes/water.js"></script>
+  <script src="../map-editor/js/gl/passes/bridges.js"></script>
+  <script src="../map-editor/js/gl/passes/tracks.js"></script>
+  <script src="../map-editor/js/gl/passes/height.js"></script>
+
+  <!-- Game. -->
+  <script src="js/rules/dice.js"></script>
+  <script src="js/rules/creatures.js"></script>
+  <script src="js/rules/actions.js"></script>
+  <script src="js/rules/conditions.js"></script>
+  <script src="js/rules/rules.js"></script>
+  <script src="js/art/heroes.js"></script>
+  <script src="js/art/poses.js"></script>
+  <script src="js/stage.js"></script>
+  <script src="js/figures.js"></script>
+  <script src="js/fx/palette.js"></script>
+  <script src="js/fx/particles.js"></script>
+  <script src="js/fx/marks.js"></script>
+  <script src="js/fx/popups.js"></script>
+  <script src="js/fx/shapes.js"></script>
+  <script src="js/fx/glow.js"></script>
+  <script src="js/fx/arcs.js"></script>
+  <script src="js/fx/volumes.js"></script>
+  <script src="js/fx/ropes.js"></script>
+  <script src="js/fx/projectiles.js"></script>
+  <script src="js/fx/blades.js"></script>
+  <script src="js/fx/deaths.js"></script>
+  <script src="js/fx/fx.js"></script>
+  <script src="js/fx/spells.js"></script>
+  <script src="js/fx/looks/signature.js"></script>
+  <script src="js/fx/looks/wizardBlast.js"></script>
+  <script src="js/fx/looks/wizardMagic.js"></script>
+  <script src="js/fx/looks/cleric.js"></script>
+  <script src="js/fx/looks/martial.js"></script>
+  <script src="js/ui/diceTray.js"></script>
+  <script src="js/ui/combatUI.js"></script>
+  <script src="js/combat/squares.js"></script>
+  <script src="js/combat/gridOverlay.js"></script>
+  <script src="js/combat/ai.js"></script>
+  <script src="js/combat/combat.js"></script>
+  <script src="js/combat/combatInput.js"></script>
+  <script src="js/fight.js"></script>
+</body>
+</html>
