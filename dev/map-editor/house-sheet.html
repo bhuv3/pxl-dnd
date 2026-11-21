@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Building sheet</title>
+<style>
+  body { margin: 0; background: #1b1d22; color: #d8d4c8; font: 14px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 12px 16px 2px; }
+  p { margin: 0 16px 8px; color: #9a968a; }
+  canvas { display: block; image-rendering: pixelated; max-width: 100%; }
+</style>
+</head>
+<body>
+<h1>Generated buildings</h1>
+<p>One seed each, with a villager for scale. ?type=house (or tavern, temple, smithy, tower, windmill, hut, cabin; several with commas take turns), ?n=24 (how many), ?cols=6, ?seed=1 (the first seed), ?scale=1, ?snow=1, ?light=45 (the light's angle; 135 is the default), ?z=4 (zoom), ?turn=0,1,2,3&amp;same=4 (each house four times, turned front, right, back, left).</p>
+<canvas id="sheet"></canvas>
+<script src="../../map-editor/js/core/random.js"></script>
+<script src="../../map-editor/js/core/grid.js"></script>
+<script src="../../map-editor/js/core/colors.js"></script>
+<script src="../../map-editor/js/model/constants.js"></script>
+<script src="../../map-editor/js/model/map.js"></script>
+<script src="../../map-editor/js/render/characterArt.js"></script>
+<script src="../../map-editor/js/render/villagers.js"></script>
+<script src="../../map-editor/js/render/monsters.js"></script>
+<script src="../../map-editor/js/render/props.js"></script>
+<script src="../../map-editor/js/render/houseKit.js"></script>
+<script src="../../map-editor/js/render/houses.js"></script>
+<script src="../../map-editor/js/render/landmarks.js"></script>
+<script src="../../map-editor/js/render/structures.js"></script>
+<script src="../../map-editor/js/render/sprites.js"></script>
+<script src="../../map-editor/js/render/animals.js"></script>
+<script src="../../map-editor/js/render/doors.js"></script>
+<script>
+// A sheet of generated buildings on grass, in rows, each with its seed and a villager beside it. window.__houses lists them.
+(() => {
+  const q = new URLSearchParams(location.search), num = (k, d) => q.get(k) ? +q.get(k) : d;
+  const Z = num('z', 4), count = num('n', 24), first = num('seed', 1), scale = num('scale', 1), PER_ROW = num('cols', 6);
+  const settings = MapModel.defaultSettings();
+  if (q.get('snow')) settings.snow = true;
+  if (q.get('light')) settings.lightAngle = +q.get('light');
+  const P = Colors.build(settings.colors);
+  Sprites.configure(settings, P, 1);
+
+  const types = (q.get('type') || 'house').split(','), turns = (q.get('turn') || '0').split(',').map(Number), same = num('same', 1);
+  const sprites = Array.from({ length: count }, (_, i) => {
+    const seed = first + Math.floor(i / same) * 37;
+    return { seed, sprite: Sprites.get(types[i % types.length], seed, scale, turns[i % turns.length]) };
+  });
+  window.__houses = sprites.map(s => ({ seed: s.seed, box: s.sprite.box, pixels: s.sprite.px.length, anchors: Object.keys(s.sprite.anchors || {}) }));
+  const cellW = Math.max(...sprites.map(s => s.sprite.box.maxX - s.sprite.box.minX)) + 22, cellH = Math.max(...sprites.map(s => -s.sprite.box.minY)) + 22;
+  const cv = document.getElementById('sheet'), rows = Math.ceil(count / PER_ROW);
+  cv.width = PER_ROW * cellW * Z; cv.height = rows * cellH * Z;
+  const g = cv.getContext('2d');
+  g.fillStyle = settings.snow ? '#dfe6ea' : '#6a8f4e'; g.fillRect(0, 0, cv.width, cv.height);
+
+  // Plots a sprite's pixels with its base at (bx, by) map pixels.
+  function plot(px, bx, by) {
+    for (const p of px) { g.fillStyle = `rgb(${p.c[0] | 0}, ${p.c[1] | 0}, ${p.c[2] | 0})`; g.fillRect((bx + p.x) * Z, (by + p.y) * Z, Z, Z); }
+  }
+  sprites.forEach(({ seed, sprite }, i) => {
+    const b = sprite.box, cx = (i % PER_ROW) * cellW + Math.round(cellW / 2) - 4, by = Math.floor(i / PER_ROW) * cellH + cellH - 12;
+    const bx = cx - Math.round((b.minX + b.maxX) / 2);
+    g.fillStyle = 'rgba(20, 40, 20, 0.25)';
+    g.beginPath(); g.ellipse((cx + 2) * Z, (by + 1) * Z, sprite.shadowR * Z, 4 * Z, 0, 0, Math.PI * 2); g.fill();
+    plot(sprite.still || sprite.px, bx, by);
+    plot(CharacterArt.ghost('villager', seed).px, bx + b.maxX + 7, by + 3);
+    g.fillStyle = '#1b1d22'; g.font = `${Z * 3}px monospace`; g.fillText(String(seed), (cx - cellW / 2 + 6) * Z, (by + 9) * Z);
+  });
+})();
+</script>
+</body>
+</html>

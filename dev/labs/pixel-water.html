@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Water Lab</title>
+<style>
+  :root {
+    --bg: #f4f3ef;
+    --panel: #ffffff;
+    --text: #1d1d1b;
+    --muted: #6b6a65;
+    --border: #e2e0d8;
+    --accent: #2f6fa0;
+    --stage: #e9e7e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615;
+      --panel: #1f1f1d;
+      --text: #ecebe6;
+      --muted: #9a9890;
+      --border: #33322f;
+      --accent: #6fb3dd;
+      --stage: #121211;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    height: 100vh;
+  }
+  aside {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .stage {
+    flex: 1;
+    overflow: auto;
+    background: var(--stage);
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+  canvas { image-rendering: pixelated; display: block; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 16px; }
+  button {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  .modes button { padding: 6px 4px; }
+  .modes button.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  details { border-top: 1px solid var(--border); padding: 10px 0; }
+  summary { cursor: pointer; font-weight: 600; user-select: none; }
+  .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin-top: 10px; }
+  .row[hidden] { display: none; }
+  .row label { font-size: 13px; }
+  .row .val { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+  .row.check { grid-template-columns: auto 1fr; }
+  .row.check input { accent-color: var(--accent); margin: 0; }
+  .row.color input { width: 40px; height: 24px; border: 1px solid var(--border); border-radius: 4px; padding: 0; background: none; }
+  .hint { font-size: 12px; color: var(--muted); margin: 2px 0 0; grid-column: 1 / -1; }
+  .status { padding: 8px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); background: var(--panel); }
+  @media (max-width: 720px) {
+    body { flex-direction: column-reverse; height: auto; }
+    aside { width: 100%; border-right: 0; border-top: 1px solid var(--border); }
+    .stage { min-height: 50vh; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Pixel water lab</h1>
+  <p class="sub">Lakes, rivers, and shores drawn entirely by code. Change a setting and the scene redraws.</p>
+  <div class="modes" id="modes">
+    <button data-mode="lake">Lake</button>
+    <button data-mode="river">River</button>
+    <button data-mode="sea">Seashore</button>
+    <button data-mode="ponds">Ponds</button>
+  </div>
+  <div class="buttons">
+    <button id="newSeed">New seed</button>
+    <button id="reset">Reset</button>
+    <button id="savePng">Save PNG</button>
+    <button id="copyCfg">Copy config</button>
+  </div>
+  <div id="controls"></div>
+</aside>
+<main>
+  <div class="stage"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+</main>
+
+<script>
+// ---------- Default settings ----------
+const DEFAULTS = {
+  mode: 'lake',
+  seed: 7,
+  width: 160,
+  height: 100,
+  scale: 5,
+
+  // Shape: lake
+  lakeSize: 0.6,
+  lakeWobble: 0.35,
+  lakeWobbleSize: 12,
+  // Shape: river
+  riverWidth: 14,
+  riverMeander: 0.5,
+  riverBendLength: 60,
+  riverWobble: 0.3,
+  // Shape: seashore
+  seaLevel: 0.45,
+  coastRoughness: 0.25,
+  coastSize: 24,
+  // Shape: ponds
+  pondLevel: 0.36,
+  pondSize: 18,
+
+  // Water
+  bandWidth: 3,
+  dither: true,
+  shimmer: 0.8,
+  flow: 0.3,
+  ripples: true,
+  rippleDensity: 1.2,
+  rippleLength: 3,
+  twinkleSpeed: 2,
+  foam: true,
+  foamWidth: 1,
+  foamBreakup: 0.35,
+  waveReach: 0.6,
+  waveSpeed: 1.2,
+
+  // Shore
+  sandWidth: 1,
+  wetSand: true,
+  pebbles: true,
+  reeds: true,
+  reedDensity: 6,
+  reedHeight: 6,
+  lilyPads: true,
+  lilyDensity: 2,
+  lilyFlowers: 0.3,
+
+  // Grass
+  grass: true,
+  grassDensity: 1.6,
+  clumping: 1,
+  wind: true,
+  windStrength: 0.9,
+  windSpeed: 1.6,
+  fps: 11,
+
+  // Colors
+  deep: '#1d4470',
+  mid: '#2a6597',
+  shallow: '#3f8fbf',
+  foamColor: '#e6f4f7',
+  glint: '#bfe6f2',
+  sand: '#d9c58a',
+  wetSandColor: '#b39d66',
+  pebble: '#a08a58',
+  groundDark: '#4b9334',
+  groundLight: '#56a13a',
+  shadow: '#3a7a2e',
+  bladeRoot: '#6db544',
+  bladeMid: '#8fcc52',
+  bladeTip: '#b4e06a',
+  reedDark: '#3f6b2a',
+  reedLight: '#5f8f34',
+  reedTop: '#7a5230',
+  lily: '#5ca23c',
+  lilyDark: '#3d7a2a',
+  lilyFlower: '#f0a6c0',
+};
+
+// Picking a mode also loads settings that suit it.
+const MODE_PRESETS = {
+  lake:  { sandWidth: 1, waveReach: 0.6, reeds: true,  lilyPads: true,  flow: 0.3, bandWidth: 3 },
+  river: { sandWidth: 1, waveReach: 0.4, reeds: true,  lilyPads: false, flow: 1.5, bandWidth: 2 },
+  sea:   { sandWidth: 8, waveReach: 3,   reeds: false, lilyPads: false, flow: 0.3, bandWidth: 4 },
+  ponds: { sandWidth: 1, waveReach: 0.5, reeds: true,  lilyPads: true,  flow: 0.2, bandWidth: 3 },
+};
+
+// ---------- Control panel layout ----------
+// rebuild: true means the shape and placements need to be regenerated.
+// when: the control only shows for some modes.
+const isMode = m => () => cfg.mode === m;
+const SECTIONS = [
+  { title: 'Canvas', open: true, items: [
+    { key: 'seed', label: 'Seed', min: 0, max: 9999, step: 1, rebuild: true },
+    { key: 'width', label: 'Width (pixels)', min: 48, max: 400, step: 1, rebuild: true },
+    { key: 'height', label: 'Height (pixels)', min: 48, max: 300, step: 1, rebuild: true },
+    { key: 'scale', label: 'Zoom', min: 1, max: 12, step: 1, suffix: 'x' },
+  ]},
+  { title: 'Shape', open: true, items: [
+    { key: 'lakeSize', label: 'Lake size', min: 0.1, max: 1.4, step: 0.05, rebuild: true, when: isMode('lake') },
+    { key: 'lakeWobble', label: 'Edge wobble', min: 0, max: 1, step: 0.05, rebuild: true, when: isMode('lake'),
+      hint: 'Noise pushes the round edge in and out.' },
+    { key: 'lakeWobbleSize', label: 'Wobble size', min: 3, max: 40, step: 1, rebuild: true, when: isMode('lake') },
+
+    { key: 'riverWidth', label: 'River width', min: 3, max: 50, step: 1, rebuild: true, when: isMode('river') },
+    { key: 'riverMeander', label: 'Meander', min: 0, max: 1, step: 0.05, rebuild: true, when: isMode('river'),
+      hint: 'How far the river swings up and down.' },
+    { key: 'riverBendLength', label: 'Bend length', min: 10, max: 200, step: 1, rebuild: true, when: isMode('river') },
+    { key: 'riverWobble', label: 'Width wobble', min: 0, max: 1, step: 0.05, rebuild: true, when: isMode('river') },
+
+    { key: 'seaLevel', label: 'Sea level', min: 0.05, max: 0.95, step: 0.01, rebuild: true, when: isMode('sea') },
+    { key: 'coastRoughness', label: 'Coast roughness', min: 0, max: 0.8, step: 0.01, rebuild: true, when: isMode('sea') },
+    { key: 'coastSize', label: 'Bay size', min: 4, max: 100, step: 1, rebuild: true, when: isMode('sea') },
+
+    { key: 'pondLevel', label: 'Water level', min: 0.05, max: 0.8, step: 0.01, rebuild: true, when: isMode('ponds'),
+      hint: 'Pixels where the noise is below this become water.' },
+    { key: 'pondSize', label: 'Pond size', min: 4, max: 60, step: 1, rebuild: true, when: isMode('ponds') },
+  ]},
+  { title: 'Water', open: true, items: [
+    { key: 'bandWidth', label: 'Depth band width', min: 1, max: 10, step: 1,
+      hint: 'Water gets one shade darker every this many pixels from the shore.' },
+    { key: 'dither', label: 'Dither between bands', type: 'check' },
+    { key: 'shimmer', label: 'Shimmer', min: 0, max: 3, step: 0.1 },
+    { key: 'flow', label: 'Flow speed', min: -4, max: 4, step: 0.1 },
+    { key: 'ripples', label: 'Glints', type: 'check' },
+    { key: 'rippleDensity', label: 'Glint density', min: 0.1, max: 6, step: 0.1, rebuild: true },
+    { key: 'rippleLength', label: 'Glint length', min: 1, max: 8, step: 1 },
+    { key: 'twinkleSpeed', label: 'Twinkle speed', min: 0.2, max: 8, step: 0.1 },
+    { key: 'foam', label: 'Foam at the edge', type: 'check' },
+    { key: 'foamWidth', label: 'Foam width', min: 0.5, max: 4, step: 0.5 },
+    { key: 'foamBreakup', label: 'Foam gaps', min: 0, max: 0.9, step: 0.05 },
+    { key: 'waveReach', label: 'Wave reach (pixels)', min: 0, max: 10, step: 0.1,
+      hint: 'How far waves wash up onto the land.' },
+    { key: 'waveSpeed', label: 'Wave speed', min: 0.1, max: 5, step: 0.1 },
+  ]},
+  { title: 'Shore', items: [
+    { key: 'sandWidth', label: 'Sand width', min: 0, max: 20, step: 1, rebuild: true },
+    { key: 'wetSand', label: 'Wet sand where waves reach', type: 'check' },
+    { key: 'pebbles', label: 'Pebbles in sand', type: 'check' },
+    { key: 'reeds', label: 'Reeds', type: 'check' },
+    { key: 'reedDensity', label: 'Reed density', min: 0.5, max: 30, step: 0.5, rebuild: true },
+    { key: 'reedHeight', label: 'Reed height', min: 3, max: 14, step: 1 },
+    { key: 'lilyPads', label: 'Lily pads', type: 'check' },
+    { key: 'lilyDensity', label: 'Lily pad density', min: 0.1, max: 5, step: 0.1, rebuild: true },
+    { key: 'lilyFlowers', label: 'Lily flower chance', min: 0, max: 1, step: 0.05 },
+  ]},
+  { title: 'Grass and wind', items: [
+    { key: 'grass', label: 'Grass tufts', type: 'check' },
+    { key: 'grassDensity', label: 'Tuft density', min: 0.1, max: 8, step: 0.1, rebuild: true },
+    { key: 'clumping', label: 'Clumping', min: 0, max: 1, step: 0.05, rebuild: true },
+    { key: 'wind', label: 'Wind sway', type: 'check' },
+    { key: 'windStrength', label: 'Wind strength', min: 0, max: 4, step: 0.1 },
+    { key: 'windSpeed', label: 'Wind speed', min: 0.1, max: 6, step: 0.1 },
+    { key: 'fps', label: 'Frames per second', min: 2, max: 30, step: 1 },
+  ]},
+  { title: 'Colors', items: [
+    { key: 'deep', label: 'Deep water', type: 'color' },
+    { key: 'mid', label: 'Middle water', type: 'color' },
+    { key: 'shallow', label: 'Shallow water', type: 'color' },
+    { key: 'foamColor', label: 'Foam', type: 'color' },
+    { key: 'glint', label: 'Glint', type: 'color' },
+    { key: 'sand', label: 'Sand', type: 'color' },
+    { key: 'wetSandColor', label: 'Wet sand', type: 'color' },
+    { key: 'pebble', label: 'Pebble', type: 'color' },
+    { key: 'groundDark', label: 'Ground dark', type: 'color' },
+    { key: 'groundLight', label: 'Ground light', type: 'color' },
+    { key: 'shadow', label: 'Tuft shadow', type: 'color' },
+    { key: 'bladeRoot', label: 'Blade root', type: 'color' },
+    { key: 'bladeMid', label: 'Blade middle', type: 'color' },
+    { key: 'bladeTip', label: 'Blade tip', type: 'color' },
+    { key: 'reedDark', label: 'Reed dark', type: 'color' },
+    { key: 'reedLight', label: 'Reed light', type: 'color' },
+    { key: 'reedTop', label: 'Cattail top', type: 'color' },
+    { key: 'lily', label: 'Lily pad', type: 'color' },
+    { key: 'lilyDark', label: 'Lily pad shade', type: 'color' },
+    { key: 'lilyFlower', label: 'Lily flower', type: 'color' },
+  ]},
+];
+
+// ---------- Settings storage ----------
+const STORAGE_KEY = 'pixel-water-config';
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved) return { ...DEFAULTS, ...saved };
+  } catch (e) {}
+  return { ...DEFAULTS };
+}
+function saveConfig() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+let cfg = loadConfig();
+
+// ---------- Randomness (same as the grass lab) ----------
+function hash(x, y) {
+  let h = (x * 374761393 + y * 668265263 + cfg.seed * 144665) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+function valueNoise(x, y, salt) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = smoothstep(x - xi), yf = smoothstep(y - yi);
+  const a = hash(xi + salt, yi), b = hash(xi + 1 + salt, yi);
+  const c = hash(xi + salt, yi + 1), d = hash(xi + 1 + salt, yi + 1);
+  const top = a + (b - a) * xf, bottom = c + (d - c) * xf;
+  return top + (bottom - top) * yf;
+}
+function noise(x, y, size, salt) {
+  return valueNoise(x / size, y / (size * 0.7), salt) * 0.7
+       + valueNoise(x / (size * 0.35) + 50, y / (size * 0.35) + 50, salt) * 0.3;
+}
+// Noise along a line, for things like a coastline or a river's path.
+function noise1D(x, size, salt) {
+  return valueNoise(x / size, 0.5, salt) * 0.7 + valueNoise(x / (size * 0.3), 3.5, salt) * 0.3;
+}
+
+// ---------- Step 1: which pixels are water? ----------
+function isWater(x, y) {
+  const W = cfg.width, H = cfg.height;
+  switch (cfg.mode) {
+    case 'lake': {
+      // An oval, with noise pushing the edge in and out.
+      const dx = (x - W / 2) / (W * cfg.lakeSize / 2);
+      const dy = (y - H / 2) / (H * cfg.lakeSize / 2);
+      const wobble = (noise(x, y, cfg.lakeWobbleSize, 200) - 0.5) * 2 * cfg.lakeWobble;
+      return Math.hypot(dx, dy) < 1 + wobble;
+    }
+    case 'river': {
+      // A line that wanders up and down, with a width that changes a little.
+      const center = H / 2 + (noise1D(x, cfg.riverBendLength, 300) - 0.5) * 2 * cfg.riverMeander * H * 0.6;
+      const halfWidth = cfg.riverWidth / 2 * (1 + (noise1D(x, 10, 301) - 0.5) * 2 * cfg.riverWobble);
+      return Math.abs(y - center) < halfWidth;
+    }
+    case 'sea': {
+      // Everything below a bumpy coastline is water.
+      const coast = H * (1 - cfg.seaLevel) + (noise1D(x, cfg.coastSize, 400) - 0.5) * 2 * cfg.coastRoughness * H;
+      return y > coast;
+    }
+    case 'ponds':
+      // Low spots in the noise fill up with water.
+      return noise(x, y, cfg.pondSize, 500) < cfg.pondLevel;
+  }
+  return false;
+}
+
+// ---------- Step 2: how far is each pixel from the shore? ----------
+// A "distance field": two quick passes over the grid, carrying distances
+// from neighbors forward (1 for side neighbors, 1.41 for diagonals).
+function distanceField(W, H, isSource) {
+  const d = new Float32Array(W * H).fill(1e9);
+  for (let i = 0; i < W * H; i++) if (isSource[i]) d[i] = 0;
+  const check = (i, x, y, cost) => {
+    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    const v = d[y * W + x] + cost;
+    if (v < d[i]) d[i] = v;
+  };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    check(i, x - 1, y, 1); check(i, x, y - 1, 1);
+    check(i, x - 1, y - 1, 1.41); check(i, x + 1, y - 1, 1.41);
+  }
+  for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) {
+    const i = y * W + x;
+    check(i, x + 1, y, 1); check(i, x, y + 1, 1);
+    check(i, x + 1, y + 1, 1.41); check(i, x - 1, y + 1, 1.41);
+  }
+  return d;
+}
+
+// ---------- Build the world (runs only when the shape changes) ----------
+let world = null;
+function buildWorld() {
+  const W = cfg.width, H = cfg.height;
+  const water = new Uint8Array(W * H);
+  const groundDark = new Uint8Array(W * H);
+  let waterCount = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    water[i] = isWater(x, y) ? 1 : 0;
+    waterCount += water[i];
+    groundDark[i] = noise(x, y, 14, 0) < 0.42 ? 1 : 0;
+  }
+  const land = water.map(v => 1 - v);
+  const waterDist = distanceField(W, H, land);  // for water pixels: distance to land
+  const landDist = distanceField(W, H, water);  // for land pixels: distance to water
+
+  const inside = (x, y) => x >= 0 && x < W && y >= 0 && y < H;
+  const at = (arr, x, y) => arr[y * W + x];
+  const things = [];  // grass tufts and reeds, drawn back to front
+  const ripples = [];
+  const lilies = [];
+  const pad = 6;
+  const area = (W + pad * 2) * (H + pad * 2);
+
+  // Grass tufts: only on land, away from the sand.
+  const tuftCandidates = Math.round(area * cfg.grassDensity / 100 * 2);
+  for (let i = 0; i < tuftCandidates; i++) {
+    const x = Math.floor(hash(i, 1) * (W + pad * 2)) - pad;
+    const y = Math.floor(hash(i, 2) * (H + pad * 2)) - pad;
+    const xc = Math.min(W - 1, Math.max(0, x)), yc = Math.min(H - 1, Math.max(0, y));
+    if (at(water, xc, yc) || at(landDist, xc, yc) <= cfg.sandWidth + 1.5) continue;
+    const weight = (1 - cfg.clumping) + cfg.clumping * 2 * noise(x, y, 14, 1000);
+    if (hash(i, 3) * 2 > weight) continue;
+    things.push({ type: 'tuft', x, y, r1: hash(i, 4), r2: hash(i, 5), r3: hash(i, 6), r4: hash(i, 7) });
+  }
+
+  // Reeds: right at the water's edge.
+  const reedCandidates = Math.round(W * H * cfg.reedDensity / 100);
+  for (let i = 0; i < reedCandidates; i++) {
+    const x = Math.floor(hash(i, 11) * W), y = Math.floor(hash(i, 12) * H);
+    const nearEdge = at(water, x, y) ? at(waterDist, x, y) <= 1.5 : at(landDist, x, y) <= cfg.sandWidth + 2;
+    if (!nearEdge) continue;
+    // Reeds grow in groups, so use noise to keep some stretches bare.
+    if (noise(x, y, 10, 1100) < 0.45) continue;
+    things.push({ type: 'reed', x, y, r1: hash(i, 13), r2: hash(i, 14), r3: hash(i, 15) });
+  }
+  things.sort((a, b) => a.y - b.y);
+
+  // Glints on the water surface.
+  const rippleCandidates = Math.round(waterCount * cfg.rippleDensity / 100);
+  for (let i = 0; i < rippleCandidates * 3 && ripples.length < rippleCandidates; i++) {
+    const x = Math.floor(hash(i, 21) * W), y = Math.floor(hash(i, 22) * H);
+    if (!at(water, x, y) || at(waterDist, x, y) < 2.5) continue;
+    ripples.push({ x, y, phase: hash(i, 23) * Math.PI * 2, speed: 0.7 + hash(i, 24) * 0.6 });
+  }
+
+  // Lily pads: calm water near the shore.
+  const lilyCandidates = Math.round(waterCount * cfg.lilyDensity / 100);
+  for (let i = 0; i < lilyCandidates; i++) {
+    const x = Math.floor(hash(i, 31) * W), y = Math.floor(hash(i, 32) * H);
+    if (x < 1 || x > W - 2 || y < 1 || y > H - 2) continue;
+    let ok = true;
+    for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1 && ok; dx++) {
+      if (!inside(x + dx, y + dy) || !at(water, x + dx, y + dy) || at(waterDist, x + dx, y + dy) < 2.5) ok = false;
+    }
+    if (!ok || at(waterDist, x, y) > cfg.bandWidth * 3 + 2) continue;
+    if (noise(x, y, 8, 1200) < 0.4) continue;  // lilies grow in patches
+    lilies.push({ x, y, r: hash(i, 33) });
+  }
+
+  world = { W, H, water, groundDark, waterDist, landDist, things, ripples, lilies, waterCount,
+            tuftCount: things.filter(t => t.type === 'tuft').length };
+}
+
+// ---------- Drawing (runs every frame) ----------
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let image = null;
+let time = 0;
+
+function hexToRgb(hex) { return [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16)); }
+function between(min, max, r) {
+  const lo = Math.min(min, max), hi = Math.max(min, max);
+  return lo + Math.floor(r * (hi - lo + 1));
+}
+
+function draw() {
+  const { W, H, water, groundDark, waterDist, landDist } = world;
+  if (canvas.width !== W || canvas.height !== H || !image) {
+    canvas.width = W; canvas.height = H;
+    image = ctx.createImageData(W, H);
+  }
+  canvas.style.width = W * cfg.scale + 'px';
+  canvas.style.height = H * cfg.scale + 'px';
+
+  const C = {};
+  for (const k of ['deep', 'mid', 'shallow', 'foamColor', 'glint', 'sand', 'wetSandColor', 'pebble',
+    'groundDark', 'groundLight', 'shadow', 'bladeRoot', 'bladeMid', 'bladeTip',
+    'reedDark', 'reedLight', 'reedTop', 'lily', 'lilyDark', 'lilyFlower']) C[k] = hexToRgb(cfg[k]);
+  const bands = [C.shallow, C.mid, C.deep];
+
+  const grid = new Array(W * H);
+  const put = (x, y, color) => { if (x >= 0 && x < W && y >= 0 && y < H) grid[y * W + x] = color; };
+
+  // How far the waves are washing up right now (0 → waveReach and back).
+  const wave = (Math.sin(time * cfg.waveSpeed) * 0.5 + 0.5) * cfg.waveReach;
+  const drift = time * cfg.flow;
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+
+    if (water[i]) {
+      // Depth = distance from shore, nudged by moving noise so the bands shimmer.
+      let d = waterDist[i];
+      if (cfg.shimmer > 0) d += (valueNoise(x / 4 - drift * 2, y / 3 + time * 0.3, 77) - 0.5) * 2 * cfg.shimmer;
+
+      const foamy = valueNoise(x / 3 - drift, y / 3 + time * 0.5, 55) > cfg.foamBreakup;
+      if (cfg.foam && d <= cfg.foamWidth && foamy) { grid[i] = C.foamColor; continue; }
+
+      // Pick a depth band. Near the edge of a band, use a checkerboard (dithering)
+      // so the two shades blend instead of meeting in a hard line.
+      const t = d / cfg.bandWidth;
+      let band = Math.floor(t);
+      if (cfg.dither && t - band > 0.75 && (x + y) % 2 === 0) band++;
+      grid[i] = bands[Math.max(0, Math.min(2, band))];
+    } else {
+      const ld = landDist[i];
+      if (ld <= wave) {
+        // A wave is washing over this land pixel. Its front edge is foam.
+        grid[i] = ld > wave - 1.2 ? C.foamColor : C.shallow;
+      } else if (cfg.wetSand && cfg.waveReach >= 1 && ld <= cfg.waveReach + 0.5) {
+        grid[i] = C.wetSandColor;
+      } else if (ld <= cfg.sandWidth) {
+        grid[i] = cfg.pebbles && hash(x + 700, y) < 0.04 ? C.pebble : C.sand;
+      } else {
+        grid[i] = groundDark[i] ? C.groundDark : C.groundLight;
+      }
+    }
+  }
+
+  // Lily pads: a small leaf with a notch, a darker underside, and maybe a flower.
+  if (cfg.lilyPads) {
+    for (const l of world.lilies) {
+      put(l.x - 1, l.y - 1, C.lily); put(l.x, l.y - 1, C.lily);
+      put(l.x - 1, l.y, C.lily); put(l.x, l.y, C.lily); put(l.x + 1, l.y, C.lily);
+      put(l.x - 1, l.y + 1, C.lilyDark); put(l.x, l.y + 1, C.lilyDark); put(l.x + 1, l.y + 1, C.lilyDark);
+      if (l.r < cfg.lilyFlowers) put(l.x, l.y - 1, C.lilyFlower);
+    }
+  }
+
+  // Glints: short light dashes that fade in and out, and drift with the flow.
+  if (cfg.ripples) {
+    for (const r of world.ripples) {
+      const v = Math.sin(time * cfg.twinkleSpeed * r.speed + r.phase);
+      if (v < 0.4) continue;
+      const len = v > 0.75 ? cfg.rippleLength : Math.max(1, cfg.rippleLength - 2);
+      const startX = Math.round(r.x + drift * 3 - len / 2);
+      for (let k = 0; k < len; k++) {
+        const x = ((startX + k) % W + W) % W;
+        if (water[r.y * W + x] && waterDist[r.y * W + x] >= 2) put(x, r.y, C.glint);
+      }
+    }
+  }
+
+  // Grass and reeds, back to front so lower ones overlap the ones behind.
+  for (const t of world.things) {
+    const sway = cfg.wind
+      ? Math.sin(time * cfg.windSpeed + t.x * 0.09 + t.y * 0.05) * cfg.windStrength
+      : 0;
+
+    if (t.type === 'tuft' && cfg.grass) {
+      for (let k = -2; k <= 2; k++) put(t.x + k, t.y + 1, C.shadow);
+      const blades = [
+        { dx: 0, h: between(3, 5, t.r1), lean: 0, center: true },
+        { dx: -1, h: between(2, 3, t.r2), lean: -2 },
+        { dx: 1, h: between(2, 3, t.r3), lean: 2 },
+      ];
+      if (t.r4 < 0.4) blades.push({ dx: 0, h: 2, lean: -1 });
+      for (const b of blades) {
+        for (let i = 0; i < b.h; i++) {
+          const f = b.h > 1 ? i / (b.h - 1) : 1;
+          const upper = f > 0.36;
+          put(t.x + b.dx + Math.round((b.lean + sway) * f * f), t.y - i,
+            b.center ? (upper ? C.bladeTip : C.bladeMid) : (upper ? C.bladeMid : C.bladeRoot));
+        }
+      }
+    }
+
+    if (t.type === 'reed' && cfg.reeds) {
+      // Two or three tall, thin stalks. Some get a brown cattail on top.
+      const stalks = t.r3 < 0.5 ? [-1, 1] : [-1, 0, 1];
+      stalks.forEach((dx, n) => {
+        const h = Math.max(2, cfg.reedHeight - Math.floor(((t.r1 * 7 + n * 3.3) % 1) * 3) - (dx === 0 ? 0 : 1));
+        let topX = t.x;
+        for (let i = 0; i < h; i++) {
+          const f = i / (h - 1);
+          const x = t.x + dx + Math.round((dx * 0.6 + sway * 0.6) * f * f);
+          put(x, t.y - i, f < 0.4 ? C.reedDark : C.reedLight);
+          topX = x;
+        }
+        if (dx === 0 && t.r2 < 0.5) {
+          put(topX, t.y - h, C.reedTop);
+          put(topX, t.y - h - 1, C.reedTop);
+        }
+      });
+    }
+  }
+
+  const data = image.data;
+  for (let i = 0; i < W * H; i++) {
+    const c = grid[i];
+    data[i * 4] = c[0]; data[i * 4 + 1] = c[1]; data[i * 4 + 2] = c[2]; data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+
+  document.getElementById('status').textContent =
+    `${W}×${H} pixels · ${Math.round(world.waterCount / (W * H) * 100)}% water · ` +
+    `${world.tuftCount} tufts · ${cfg.lilyPads ? world.lilies.length : 0} lily pads · seed ${cfg.seed}`;
+}
+
+// ---------- Animation loop ----------
+let lastFrame = 0;
+function loop(now) {
+  if (now - lastFrame >= 1000 / cfg.fps) {
+    time += Math.min(0.5, (now - lastFrame) / 1000);
+    lastFrame = now;
+    draw();
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- Control panel ----------
+const inputs = {};
+function formatValue(item, v) {
+  if (item.step && item.step < 1) return (+v).toFixed(2).replace(/\.?0+$/, '') + (item.suffix || '');
+  return v + (item.suffix || '');
+}
+
+function buildControls() {
+  const root = document.getElementById('controls');
+  for (const section of SECTIONS) {
+    const details = document.createElement('details');
+    details.open = !!section.open;
+    details.innerHTML = `<summary>${section.title}</summary>`;
+    for (const item of section.items) {
+      const row = document.createElement('div');
+      const id = 'ctl-' + item.key;
+      if (item.type === 'check') {
+        row.className = 'row check';
+        row.innerHTML = `<input type="checkbox" id="${id}"><label for="${id}">${item.label}</label>`;
+      } else if (item.type === 'color') {
+        row.className = 'row color';
+        row.innerHTML = `<label for="${id}">${item.label}</label><input type="color" id="${id}">`;
+      } else {
+        row.className = 'row';
+        row.innerHTML = `<label for="${id}">${item.label}</label><span class="val"></span>
+          <input type="range" id="${id}" min="${item.min}" max="${item.max}" step="${item.step}">`;
+      }
+      if (item.hint) row.insertAdjacentHTML('beforeend', `<p class="hint">${item.hint}</p>`);
+      details.appendChild(row);
+
+      const input = row.querySelector('input');
+      const valEl = row.querySelector('.val');
+      inputs[item.key] = { input, valEl, item, row };
+      input.addEventListener('input', () => {
+        if (item.type === 'check') cfg[item.key] = input.checked;
+        else if (item.type === 'color') cfg[item.key] = input.value;
+        else cfg[item.key] = parseFloat(input.value);
+        if (valEl) valEl.textContent = formatValue(item, cfg[item.key]);
+        if (item.rebuild) buildWorld();
+        saveConfig();
+        draw();
+      });
+    }
+    root.appendChild(details);
+  }
+}
+
+function syncControls() {
+  for (const key in inputs) {
+    const { input, valEl, item, row } = inputs[key];
+    if (item.type === 'check') input.checked = cfg[key];
+    else input.value = cfg[key];
+    if (valEl) valEl.textContent = formatValue(item, cfg[key]);
+    row.hidden = item.when ? !item.when() : false;
+  }
+  document.querySelectorAll('#modes button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === cfg.mode);
+  });
+}
+
+function refresh() { syncControls(); buildWorld(); saveConfig(); draw(); }
+
+document.querySelectorAll('#modes button').forEach(b => {
+  b.addEventListener('click', () => {
+    cfg.mode = b.dataset.mode;
+    Object.assign(cfg, MODE_PRESETS[cfg.mode]);
+    refresh();
+  });
+});
+document.getElementById('newSeed').addEventListener('click', () => {
+  cfg.seed = Math.floor(Math.random() * 10000);
+  refresh();
+});
+document.getElementById('reset').addEventListener('click', () => {
+  const mode = cfg.mode;
+  cfg = { ...DEFAULTS, mode, ...MODE_PRESETS[mode] };
+  refresh();
+});
+document.getElementById('savePng').addEventListener('click', () => {
+  const out = document.createElement('canvas');
+  out.width = cfg.width * cfg.scale;
+  out.height = cfg.height * cfg.scale;
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(canvas, 0, 0, out.width, out.height);
+  const a = document.createElement('a');
+  a.download = `water-${cfg.mode}-seed-${cfg.seed}.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+});
+document.getElementById('copyCfg').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(cfg, null, 2));
+    btn.textContent = 'Copied';
+  } catch (err) {
+    console.log(JSON.stringify(cfg, null, 2));
+    btn.textContent = 'Logged to console';
+  }
+  setTimeout(() => { btn.textContent = 'Copy config'; }, 1500);
+});
+
+buildControls();
+refresh();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

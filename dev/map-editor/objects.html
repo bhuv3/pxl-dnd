@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Object gallery</title>
+<style>
+  body { margin: 0; background: #1b1d22; color: #d8d4c8; font: 14px/1.4 system-ui, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 18px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: #23262d; border-bottom: 1px solid #333842; }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  header label { display: flex; gap: 6px; align-items: center; color: #b4b0a4; }
+  header button, header select { background: #2f333c; color: #e8e4d8; border: 1px solid #454b57; border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer; }
+  #hourText { width: 44px; color: #e8e4d8; }
+  .stage { position: relative; margin: 12px 16px; display: inline-block; }
+  .stage canvas { display: block; image-rendering: pixelated; }
+  .name, .band { position: absolute; white-space: nowrap; pointer-events: none; }
+  .name { transform: translateX(-50%); font: 11px/1 ui-monospace, monospace; color: #fff; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+  .band { left: 6px; font: 600 13px/1 system-ui, sans-serif; color: #ffe9a8; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+  h2 { font-size: 14px; margin: 14px 16px 4px; color: #ffe9a8; }
+  p { margin: 0 16px 6px; color: #9a968a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Object gallery</h1>
+  <label>Time <input id="hour" type="range" min="0" max="24" step="0.5" value="12"><span id="hourText">12:00</span></label>
+  <label><input id="wind" type="checkbox" checked> Wind</label>
+  <label>Zoom <select id="zoom"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+  <button id="reroll">New looks</button>
+  <button id="pause">Pause</button>
+</header>
+<p>Every object the editor can place, drawn by the real renderer and moving as it does on a map: leaves and flags in the wind, flames and smoke, turning sails, bobbing boats, wandering animals. Drag Time toward night to see windows and lights come on.</p>
+<div class="stage" id="stage"></div>
+<h2>Characters and monsters</h2>
+<p>Each turns through its eight facings while it walks, at the same scale as the map above.</p>
+<div class="stage" id="cast"><canvas id="castCanvas"></canvas></div>
+<script src="../../map-editor/js/core/random.js"></script>
+<script src="../../map-editor/js/core/grid.js"></script>
+<script src="../../map-editor/js/core/colors.js"></script>
+<script src="../../map-editor/js/model/constants.js"></script>
+<script src="../../map-editor/js/model/map.js"></script>
+<script src="../../map-editor/js/render/rivers.js"></script>
+<script src="../../map-editor/js/render/resolve.js"></script>
+<script src="../../map-editor/js/render/incremental.js"></script>
+<script src="../../map-editor/js/render/characterArt.js"></script>
+<script src="../../map-editor/js/render/villagers.js"></script>
+<script src="../../map-editor/js/render/monsters.js"></script>
+<script src="../../map-editor/assets/characters/elf-wizard.js"></script>
+<script src="../../map-editor/js/render/props.js"></script>
+<script src="../../map-editor/js/render/houseKit.js"></script>
+<script src="../../map-editor/js/render/houses.js"></script>
+<script src="../../map-editor/js/render/landmarks.js"></script>
+<script src="../../map-editor/js/render/structures.js"></script>
+<script src="../../map-editor/js/render/sprites.js"></script>
+<script src="../../map-editor/js/render/details.js"></script>
+<script src="../../map-editor/js/render/ground.js"></script>
+<script src="../../map-editor/js/render/water.js"></script>
+<script src="../../map-editor/js/render/bridges.js"></script>
+<script src="../../map-editor/js/render/height.js"></script>
+<script src="../../map-editor/js/render/daylight.js"></script>
+<script src="../../map-editor/js/render/life.js"></script>
+<script src="../../map-editor/js/render/fire.js"></script>
+<script src="../../map-editor/js/render/weather.js"></script>
+<script src="../../map-editor/js/render/actors.js"></script>
+<script src="../../map-editor/js/render/characters.js"></script>
+<script src="../../map-editor/js/render/animals.js"></script>
+<script src="../../map-editor/js/render/tracks.js"></script>
+<script src="../../map-editor/js/render/doors.js"></script>
+<script src="../../map-editor/js/render/stages.js"></script>
+<script src="../../map-editor/js/gl/context.js"></script>
+<script src="../../map-editor/js/gl/chunks.js"></script>
+<script src="../../map-editor/js/gl/shaders.js"></script>
+<script src="../../map-editor/js/gl/textures.js"></script>
+<script src="../../map-editor/js/gl/world.js"></script>
+<script src="../../map-editor/js/gl/frame.js"></script>
+<script src="../../map-editor/js/gl/atlas.js"></script>
+<script src="../../map-editor/js/gl/ground.js"></script>
+<script src="../../map-editor/js/gl/passes/static.js"></script>
+<script src="../../map-editor/js/gl/passes/tint.js"></script>
+<script src="../../map-editor/js/gl/passes/lights.js"></script>
+<script src="../../map-editor/js/gl/passes/glow.js"></script>
+<script src="../../map-editor/js/gl/passes/smoke.js"></script>
+<script src="../../map-editor/js/gl/passes/life.js"></script>
+<script src="../../map-editor/js/gl/passes/weather.js"></script>
+<script src="../../map-editor/js/gl/passes/sprites.js"></script>
+<script src="../../map-editor/js/gl/passes/water.js"></script>
+<script src="../../map-editor/js/gl/passes/bridges.js"></script>
+<script src="../../map-editor/js/gl/passes/tracks.js"></script>
+<script src="../../map-editor/js/gl/passes/height.js"></script>
+<script src="parity.js"></script>
+<script>
+// The gallery: one map holding every object in rows by toolbar section (boats and ducks on ponds, furniture and lights on a
+// wooden floor), drawn each frame by the editor's own stages on the GL frame, with name labels over it; and the characters,
+// drawn from their art, turning as they walk. ?seed=1 picks the looks.
+(async () => {
+  const $ = id => document.getElementById(id), q = new URLSearchParams(location.search);
+  const SKIP = ['door'], INDOORS = ['Furniture', 'Lights'];
+  let WIDTH = 760;                                             // map pixels across: what fits the window at the zoom
+  const state = { seed: +(q.get('seed') || 1), hour: 12, wind: true, zoom: 2, paused: false, built: null, items: [], bands: [] };
+
+  // Lays the objects out in rows, a band per toolbar section. Returns { items: [{ type, seed, x, y }], bands, height }.
+  function layout() {
+    const settings = MapModel.defaultSettings();
+    Sprites.configure(settings, Colors.build(settings.colors), 1);
+    const items = [], bands = [];
+    let top = 0;
+    for (const [group, types] of Object.entries(Types.OBJECT_GROUPS)) {
+      const list = types.filter(t => !SKIP.includes(t) && !CharacterArt.has(t));
+      if (!list.length) continue;
+      const bandTop = top;
+      top += 16;
+      let row = [], x = 0;
+      const flush = () => {
+        const tall = Math.max(...row.map(r => r.up)) + 20;
+        for (const r of row) items.push({ type: r.type, seed: r.seed, x: r.x, y: top + tall - 16 });
+        top += tall; row = []; x = 0;
+      };
+      list.forEach((type, k) => {
+        const seed = state.seed + items.length * 37 + row.length * 37 + k, animal = Animals.has(type);
+        const box = animal ? { minX: -10, maxX: 10, minY: -12 } : Sprites.get(type, seed, 1, 0).box;
+        const wide = Math.max(54, box.maxX - box.minX + 20);
+        if (x + wide > WIDTH && row.length) flush();
+        row.push({ type, seed, x: x + Math.round(wide / 2 - (box.minX + box.maxX) / 2), up: -box.minY });
+        x += wide;
+      });
+      if (row.length) flush();
+      bands.push({ group, y0: bandTop, y1: top });
+    }
+    return { items, bands, height: top + 8 };
+  }
+
+  // The map: grass, a wooden floor under the furniture and lights, a pond under each boat and duck, and the objects.
+  function makeMap(plan) {
+    const map = MapModel.create(WIDTH, plan.height, state.seed, Types.GROUND.GRASS);
+    map.name = 'Object gallery';
+    for (const b of plan.bands) if (INDOORS.includes(b.group)) for (let y = b.y0 + 2; y < b.y1 - 2; y++) for (let x = 4; x < WIDTH - 4; x++) map.ground[y * WIDTH + x] = Types.GROUND.WOOD_FLOOR;
+    for (const it of plan.items) {
+      if (it.type === 'boat' || Animals.isAquatic(it.type)) {
+        for (let dy = -12; dy <= 9; dy++) for (let dx = -27; dx <= 27; dx++) {
+          const x = it.x + dx, y = it.y + dy;
+          if (x > 1 && y > 1 && x < WIDTH - 2 && y < plan.height - 2 && Math.hypot(dx / 27, dy / 11) < 1) map.water[y * WIDTH + x] = Types.WATER.LAKE;
+        }
+      }
+      map.objects.push({ id: MapModel.nextId(map), type: it.type, x: it.x, y: it.y, seed: it.seed, scale: 1 });
+    }
+    return map;
+  }
+
+  // Builds the map and its labels.
+  async function build() {
+    WIDTH = Math.max(300, Math.min(1000, Math.floor((window.innerWidth - 40) / state.zoom)));
+    const plan = layout(), map = makeMap(plan);
+    let data = MapModel.serialize(map);
+    if (typeof data === 'string') data = JSON.parse(data);
+    state.built = await GlParity.build(data);
+    state.items = plan.items; state.bands = plan.bands;
+    const stage = $('stage');
+    stage.innerHTML = '';
+    stage.appendChild(GlFrame.canvas());
+    label();
+  }
+
+  // Puts the names (and the sections' headings) over the canvas at the current zoom.
+  function label() {
+    const stage = $('stage'), z = state.zoom, canvas = GlFrame.canvas();
+    canvas.style.width = WIDTH * z + 'px';
+    canvas.style.height = state.built.h * z + 'px';
+    stage.querySelectorAll('.name, .band').forEach(el => el.remove());
+    const add = (cls, text, left, top) => { const el = document.createElement('div'); el.className = cls; el.textContent = text; el.style.left = left + 'px'; el.style.top = top + 'px'; stage.appendChild(el); };
+    for (const b of state.bands) add('band', b.group, 6, b.y0 * z + 3);
+    for (const it of state.items) add('name', Types.OBJECT_NAMES[it.type] || it.type, it.x * z, (it.y + 6) * z);
+  }
+
+  // One frame of the map, at the chosen hour and wind.
+  function drawMap(time) {
+    const b = state.built;
+    const ctx = GlParity.context(b, time, { timeOfDay: state.hour, dayCycle: false, wind: state.wind });
+    Stages.finishGl(ctx, Stages.run(ctx, { gl: true }));
+  }
+
+  // The characters: each family's first few members and every hero, walking on the spot and turning.
+  const cast = [];
+  function castList() {
+    cast.length = 0;
+    for (const types of Object.values(Types.OBJECT_GROUPS)) for (const type of types) if (CharacterArt.has(type)) {
+      const many = CharacterArt.isGenerated(type) ? 4 : 1;
+      for (let k = 0; k < many; k++) cast.push({ type, seed: state.seed + k * 53 + cast.length });
+    }
+  }
+  function drawCast(time) {
+    const S = CharacterArt.SIZE, cell = S + 26, per = Math.max(1, Math.floor((WIDTH * state.zoom) / (cell * 2))), cv = $('castCanvas');
+    const rows = Math.ceil(cast.length / per), w = per * cell * 2, h = rows * (cell + 6) * 2;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const g = cv.getContext('2d');
+    g.fillStyle = '#6a8f4e'; g.fillRect(0, 0, w, h);
+    g.imageSmoothingEnabled = false; g.font = '11px ui-monospace, monospace'; g.textAlign = 'center';
+    const tmp = drawCast.tmp || (drawCast.tmp = document.createElement('canvas'));
+    tmp.width = tmp.height = S;
+    cast.forEach((c, i) => {
+      const ch = CharacterArt.get(c.type, c.seed);
+      if (!ch || !ch.dirs) return;
+      const dir = ch.dirs[CharacterArt.DIRS[Math.floor(time / 1.6 + i) % 8]], frame = dir.frames[Math.floor(time * 6) % 4];
+      tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(frame), S, S), 0, 0);
+      const x = (i % per) * cell * 2 + cell - S, y = Math.floor(i / per) * (cell + 6) * 2 + 8;
+      const k = state.zoom / 4;                                 // an art pixel is half a map pixel: the same scale as the map above
+      g.drawImage(tmp, x + S * (1 - k), y + S * 2 * (1 - k), S * 2 * k, S * 2 * k);
+      g.fillStyle = '#fff'; g.fillText(Types.OBJECT_NAMES[c.type] || c.type, x + S, y + S * 2 + 14);
+    });
+  }
+
+  // The loop: a timer, not requestAnimationFrame, so it keeps its pace in a background or embedded tab.
+  function tick() {
+    if (!state.paused && state.built) {
+      const time = performance.now() / 1000;
+      try { drawMap(time); drawCast(time); } catch (e) { console.error('Gallery frame failed', e); state.paused = true; }
+    }
+    setTimeout(tick, 40);
+  }
+
+  $('hour').addEventListener('input', e => { state.hour = +e.target.value; $('hourText').textContent = `${Math.floor(state.hour)}:${state.hour % 1 ? '30' : '00'}`; });
+  $('wind').addEventListener('change', e => { state.wind = e.target.checked; });
+  $('zoom').addEventListener('change', async e => { state.zoom = +e.target.value; state.built = null; await build(); });
+  $('pause').addEventListener('click', e => { state.paused = !state.paused; e.target.textContent = state.paused ? 'Play' : 'Pause'; });
+  $('reroll').addEventListener('click', async () => { state.seed += 1000; state.built = null; await build(); castList(); });
+
+  if (!Types.OBJECT_GROUPS.Animals) Animals.register();
+  await build();
+  castList();
+  window.__gallery = state;
+  tick();
+})();
+</script>
+</body>
+</html>

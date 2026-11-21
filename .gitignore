@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Claude Code local config and skills
+.claude/
+
+# Python / Node / editors
+__pycache__/
+*.pyc
+node_modules/
+.vscode/
+
+# Your own maps and saves (samples/maps/, samples/maps/big/): never committed
+/samples
+/backups/

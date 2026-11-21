@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Height Styles Lab</title>
+<style>
+  :root { --bg: #1b1d21; --panel: #24272c; --text: #e8e6e1; --muted: #a3a09a; --accent: #9fd36b; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 16px; }
+  section { background: var(--panel); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 2px; color: var(--accent); }
+  section p { margin: 0 0 8px; color: var(--muted); }
+  canvas { width: 100%; image-rendering: pixelated; display: block; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Height styles</h1>
+  <p class="lead">The same painted map in three styles: a 4-level mountain with a path over it, a small 1–2 level hill, a pond, and a forest. Grass, water, and details are the editor's own.</p>
+  <section><h2>A. Stepped ledges</h2><p>Terraces every half level (3 px), each with a lit lip and a shaded grass face. Each level is a shade lighter.</p><canvas id="ledges"></canvas></section>
+  <section><h2>B. Painted shading</h2><p>Smooth ground. Bold light and shadow bands, lighter and yellower toward the top, faint contour lines, rock and snow on the peak.</p><canvas id="painted"></canvas></section>
+  <section><h2>C. Mountain sprites</h2><p>Flat ground. Raised areas fill with drawn hills (low) and rocky peaks (high), snow on the tallest.</p><canvas id="sprites"></canvas></section>
+</main>
+
+<script src="../../map-editor/js/core/random.js"></script>
+<script src="../../map-editor/js/core/grid.js"></script>
+<script src="../../map-editor/js/core/colors.js"></script>
+<script src="../../map-editor/js/model/constants.js"></script>
+<script src="../../map-editor/js/model/map.js"></script>
+<script src="../../map-editor/js/render/rivers.js"></script>
+<script src="../../map-editor/js/render/resolve.js"></script>
+<script src="../../map-editor/js/render/characterArt.js"></script>
+<script src="../../map-editor/assets/characters/elf-wizard.js"></script>
+<script src="../../map-editor/js/render/props.js"></script>
+<script src="../../map-editor/js/render/sprites.js"></script>
+<script src="../../map-editor/js/render/details.js"></script>
+<script src="../../map-editor/js/render/ground.js"></script>
+<script src="../../map-editor/js/render/water.js"></script>
+<script src="../../map-editor/js/render/bridges.js"></script>
+<script src="../../map-editor/js/render/height.js"></script>
+<script src="../../map-editor/js/render/daylight.js"></script>
+<script src="../../map-editor/js/render/life.js"></script>
+<script src="../../map-editor/js/render/fire.js"></script>
+<script src="../../map-editor/js/render/weather.js"></script>
+<script src="../../map-editor/js/render/actors.js"></script>
+<script src="../../map-editor/js/render/characters.js"></script>
+<script src="../../map-editor/js/render/animals.js"></script>
+<script src="../../map-editor/js/render/doors.js"></script>
+<script>
+// Height styles lab: builds one test map with the editor's modules, then draws its height three ways.
+const Lab = (() => {
+  const W = 200, H = 140, SCALE = 4, LH = 6;   // map size, canvas zoom, pixels per level
+  const { GROUND, WATER, SCATTER } = Types;
+
+  // The test map: painted levels (like stacked Raise strokes), a path over the mountain, a pond, a forest.
+  function buildMap() {
+    const map = MapModel.create(W, H, 777, GROUND.GRASS);
+    const levels = new Uint8Array(W * H);
+    const blob = (cx, cy, r, f) => {
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const wob = 1 + (Random.noise(x, y, 14, cx + r) - 0.5) * 0.5;
+        if (Math.hypot((x - cx) / 1.25, y - cy) < r * wob) f(y * W + x);
+      }
+    };
+    Random.setSeed(map.seed);
+    [[44, 1], [33, 2], [22, 3], [12, 4]].forEach(([r, n]) => blob(80, 62, r, i => { levels[i] = n; }));
+    [[18, 1], [9, 2]].forEach(([r, n]) => blob(160, 100, r, i => { levels[i] = Math.max(levels[i], n); }));
+    blob(26, 118, 13, i => { map.water[i] = WATER.LAKE; levels[i] = 0; });
+    blob(175, 30, 22, i => { if (!levels[i]) map.scatter[i] = SCATTER.FOREST; });
+    for (let t = 0; t <= 1; t += 0.002) {   // a winding path from the bottom, over the shoulder, to the top
+      const x = Math.round(60 + 70 * t + Math.sin(t * 7) * 10), y = Math.round(139 - 135 * t);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const i = (y + dy) * W + x + dx;
+        if (i >= 0 && i < W * H && !map.water[i]) map.ground[i] = GROUND.PATH;
+      }
+    }
+    return { map, levels };
+  }
+
+  // Smooth height in pixels from the painted levels (the editor's current slope math, Phase 24).
+  function smooth(levels, water) {
+    const S = new Float32Array(W * H);
+    for (let i = 0; i < W * H; i++) S[i] = water[i] ? 0 : levels[i] * LH;
+    const d1 = 0.5, d2 = 0.5 * Math.SQRT2;
+    for (const dir of [1, -1]) {
+      for (let y = dir > 0 ? 0 : H - 1; y >= 0 && y < H; y += dir) {
+        for (let x = dir > 0 ? 0 : W - 1; x >= 0 && x < W; x += dir) {
+          const i = y * W + x, py = y - dir, px = x - dir;
+          let v = S[i];
+          if (px >= 0 && px < W) v = Math.min(v, S[i - dir] + d1);
+          if (py >= 0 && py < H) {
+            v = Math.min(v, S[i - dir * W] + d1);
+            if (px >= 0 && px < W) v = Math.min(v, S[i - dir * W - dir] + d2);
+            if (x + dir >= 0 && x + dir < W) v = Math.min(v, S[i - dir * W + dir] + d2);
+          }
+          S[i] = v;
+        }
+      }
+    }
+    for (let pass = 0; pass < 2; pass++) blur(S, 2);
+    return S;
+  }
+
+  // Box blur in place, rows then columns.
+  function blur(a, r) {
+    const tmp = new Float32Array(W * H);
+    const run = (get, set, count, len) => {
+      for (let c = 0; c < count; c++) for (let k = 0; k < len; k++) {
+        let sum = 0;
+        for (let d = -r; d <= r; d++) sum += get(c, Math.max(0, Math.min(len - 1, k + d)));
+        set(c, k, sum / (2 * r + 1));
+      }
+    };
+    run((y, x) => a[y * W + x], (y, x, v) => { tmp[y * W + x] = v; }, H, W);
+    run((x, y) => tmp[y * W + x], (x, y, v) => { a[y * W + x] = v; }, W, H);
+  }
+
+  // The flat picture: baked ground, water, and every detail, as the editor draws a flat map.
+  function flatFrame(map, world, pal) {
+    const frame = Ground.bake(world, map, pal);
+    Water.draw(frame, world, map.settings, pal, 0);
+    Details.draw(frame, world, map.settings, pal, 0);
+    return frame;
+  }
+
+  const mul = (c, f) => [Math.min(255, c[0] * f), Math.min(255, c[1] * f), Math.min(255, c[2] * f)];
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const get = (f, i) => [f[i * 4], f[i * 4 + 1], f[i * 4 + 2]];
+  const set = (f, i, c) => { f[i * 4] = c[0]; f[i * 4 + 1] = c[1]; f[i * 4 + 2] = c[2]; f[i * 4 + 3] = 255; };
+
+  // Draws rows back to front, each pixel raised by lift, with face(x, y, k, n, top) filling the n rows below it.
+  function compose(src, lift, face) {
+    const out = new Uint8ClampedArray(src.length);
+    out.set(src);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x, L = lift[i], sy = y - L, top = get(src, i);
+        if (sy >= 0 && sy < H) set(out, sy * W + x, top);
+        const n = L - (y + 1 < H ? lift[i + W] : 0);
+        for (let k = 1; k <= n; k++) {
+          const fy = sy + k;
+          if (fy >= 0 && fy < H) set(out, fy * W + x, face(x, y, k, n, top));
+        }
+      }
+    }
+    return out;
+  }
+
+  // A. Terraces every STEP pixels: lit lip on each ledge top, shaded grass face, dark foot line, lighter per level.
+  function ledges(src, S, water, pal) {
+    const STEP = 3;
+    const lift = new Int16Array(W * H);
+    for (let i = 0; i < W * H; i++) lift[i] = water[i] ? 0 : Math.floor(S[i] / STEP) * STEP;
+    const f = src.slice();
+    const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : lift[y * W + x]);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x, L = lift[i];
+      if (water[i]) continue;
+      let k = 1 + (L / STEP) * 0.035;
+      if (at(x, y + 1) < L) k *= 1.22;                              // front lip
+      else if (at(x, y - 1) < L) k *= 1.12;                         // back edge catches light
+      else if (at(x - 1, y) < L) k *= 1.08;                         // west edge, lit side
+      else if (at(x + 1, y) < L) k *= 0.8;                          // east edge, shade side
+      if (at(x, y - 1) > L) k *= 0.78;                              // foot of the ledge behind
+      set(f, i, mul(get(f, i), k));
+    }
+    return compose(f, lift, (x, y, k, n, top) => {
+      if (k === n) return mul(top, 0.42);
+      const streak = Random.hash(x, 91) < 0.25 ? 0.9 : 1;
+      return mul(top, (k === 1 ? 0.72 : 0.62) * streak);
+    });
+  }
+
+  // B. Smooth ground: 4 bold light bands (light from the north-west), lighter and yellower higher up,
+  // contour lines per level, rock then snow near the top.
+  function painted(src, S, water, pal) {
+    const lift = new Int16Array(W * H);
+    for (let i = 0; i < W * H; i++) lift[i] = water[i] ? 0 : Math.round(S[i]);
+    const f = src.slice(), sun = [214, 220, 120];
+    const top = S.reduce((m, v) => Math.max(m, v), 0) / LH;
+    const hs = (x, y) => S[Math.max(0, Math.min(H - 1, y)) * W + Math.max(0, Math.min(W - 1, x))];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x, h = S[i];
+      if (water[i] || h < 0.5) continue;
+      const v = (hs(x + 1, y) - hs(x - 1, y) + hs(x, y + 1) - hs(x, y - 1)) / 2 + ((x + y) & 1 ? 0.07 : -0.07);
+      const band = v > 0.45 ? 1.2 : v > 0.05 ? 1.07 : v > -0.4 ? 0.88 : 0.72;
+      const lvl = h / LH, rough = Random.noise(x, y, 3, 17) * 0.35;
+      let c = mix(get(f, i), sun, Math.min(0.35, lvl * 0.09));
+      if (lvl > top - 0.35 + rough * 0.5) c = mix(pal.snow, [170, 190, 215], band < 1 ? 0.5 : 0);
+      else if (lvl > top - 1 + rough) {
+        const r = Random.hash(x, y + 9);
+        c = band > 1 ? (r < 0.2 ? pal.rockHighlight : pal.rockLight) : band > 0.9 ? (r < 0.3 ? pal.rockLight : pal.rockMid) : (r < 0.25 ? pal.rockOutline : pal.rockDark);
+      }
+      else c = mul(c, band);
+      const contour = Math.floor(h / LH) !== Math.floor(hs(x + 1, y) / LH) || Math.floor(h / LH) !== Math.floor(hs(x, y + 1) / LH);
+      if (contour && lvl < top - 1) c = mul(c, 0.82);
+      set(f, i, c);
+    }
+    return compose(f, lift, (x, y, k, n, top) => top);
+  }
+
+  // C. Flat ground, darker foothills, and drawn hills and peaks scattered over raised ground (bigger and rockier higher up).
+  function sprites(src, S, levels, map, pal) {
+    const f = src.slice();
+    for (let i = 0; i < W * H; i++) if (levels[i] && !map.water[i]) set(f, i, mul(mix(get(f, i), pal.dirt, 0.25), 0.9));
+    const spots = [];
+    for (let gy = 0; gy < H; gy += 7) for (let gx = 0; gx < W; gx += 9) {
+      const x = gx + Math.floor(Random.hash(gx, gy + 5) * 9), y = gy + Math.floor(Random.hash(gx + 3, gy) * 7);
+      if (x >= W || y >= H) continue;
+      const lvl = S[y * W + x] / LH;
+      if (lvl < 0.6 || nearPath(map, x, y, 4)) continue;
+      spots.push({ x, y, lvl });
+    }
+    spots.sort((a, b) => a.y - b.y).forEach(s => (s.lvl > 1.6 ? peak : hill)(f, s, pal));
+    return f;
+  }
+
+  function nearPath(map, x, y, r) {
+    for (let dy = -r; dy <= 1; dy++) for (let dx = -r; dx <= r; dx++) {
+      const i = (y + dy) * W + x + dx;
+      if (i >= 0 && i < W * H && map.ground[i] === GROUND.PATH) return true;
+    }
+    return false;
+  }
+
+  // A rounded grassy hump: lit on the left, shaded on the right, dark outline.
+  function hill(f, s, pal) {
+    const rw = 6 + Math.round(s.lvl * 2), rh = 3 + Math.round(s.lvl * 2);
+    for (let dy = -rh; dy <= 0; dy++) for (let dx = -rw; dx <= rw; dx++) {
+      const d = (dx / rw) ** 2 + (dy / rh) ** 2;
+      if (d > 1) continue;
+      const x = s.x + dx, y = s.y + dy;
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      const edge = d > 0.78;
+      const c = edge ? pal.grassLip : dx < -dy * 0.6 ? mul(pal.grassLight, 1.18) : dx < rw * 0.3 ? pal.grassLight : pal.grassDark;
+      set(f, y * W + x, edge ? mul(c, 0.7) : c);
+    }
+  }
+
+  // A rocky peak: triangle with a lit west face, shaded east face, outline, and a snow cap when high.
+  function peak(f, s, pal) {
+    const ph = Math.round(8 + s.lvl * 4), half = Math.round(ph * 0.75);
+    const tipX = s.x + Math.round((Random.hash(s.x, s.y) - 0.5) * 3);
+    for (let dy = 0; dy <= ph; dy++) {
+      const y = s.y - ph + dy, span = Math.round(half * dy / ph);
+      for (let dx = -span; dx <= span; dx++) {
+        const x = tipX + dx;
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        const edge = Math.abs(dx) === span || dy === ph;
+        const west = dx < Math.round(Math.sin(dy * 0.7 + s.x) * 0.8);
+        const snowy = s.lvl > 2.6 && dy < ph * (0.25 + (s.lvl - 2.6) * 0.15) + Random.hash(x, 7) * 2;
+        let c = snowy ? (west ? pal.snow : mix(pal.snow, [150, 170, 200], 0.55)) : west ? pal.rockLight : pal.rockDark;
+        if (!snowy && Random.hash(x, y) < 0.12) c = pal.rockMid;
+        set(f, y * W + x, edge ? pal.rockOutline : c);
+      }
+    }
+  }
+
+  // Puts a picture on a canvas at SCALE.
+  function show(id, pixels) {
+    const c = document.getElementById(id);
+    c.width = W * SCALE; c.height = H * SCALE;
+    const small = document.createElement('canvas');
+    small.width = W; small.height = H;
+    small.getContext('2d').putImageData(new ImageData(Uint8ClampedArray.from(pixels), W, H), 0, 0);
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, 0, 0, c.width, c.height);
+  }
+
+  function run() {
+    const { map, levels } = buildMap();
+    Random.setSeed(map.seed);
+    const pal = Colors.build(map.settings.colors);
+    const world = Resolve.run(map);
+    Details.place(world, map, pal);
+    const src = flatFrame(map, world, pal);
+    const S = smooth(levels, map.water);
+    show('ledges', ledges(src, S, map.water, pal));
+    show('painted', painted(src, S, map.water, pal));
+    show('sprites', sprites(src, S, levels, map, pal));
+  }
+
+  return { run };
+})();
+
+Lab.run();
+</script>
+</body>
+</html>

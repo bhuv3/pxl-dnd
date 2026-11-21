@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Map Editor</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand" title="Pixel map editor"><span class="brand-mark" aria-hidden="true"></span></div>
+  <div class="map-title">
+    <input id="mapName" class="map-name" aria-label="Map name" spellcheck="false">
+    <span id="mapMeta" class="map-meta"></span>
+  </div>
+  <div class="menu-wrap">
+    <button id="btnFile" class="ghost" aria-haspopup="menu" aria-expanded="false">File</button>
+    <div class="menu" id="fileMenu" role="menu" hidden>
+      <button id="btnNew" role="menuitem"><span class="mi">New map…</span></button>
+      <button id="btnOpen" role="menuitem"><span class="mi">Open…</span><kbd>Ctrl O</kbd></button>
+      <button id="btnSave" role="menuitem"><span class="mi">Save</span><kbd>Ctrl S</kbd></button>
+      <div class="menu-sep"></div>
+      <button id="btnExport" role="menuitem"><span class="mi">Export PNG…</span></button>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <button id="btnCommand" class="command-trigger" title="Search everything (Ctrl/Cmd + K)">
+    <span class="ct-icon"></span><span class="ct-text">Search tools, objects, settings</span><kbd id="commandKey">Ctrl K</kbd>
+  </button>
+  <div class="spacer"></div>
+  <div class="group">
+    <button id="btnUndo" class="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo"></button>
+    <button id="btnRedo" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"></button>
+  </div>
+  <div class="group seg" id="viewToggle">
+    <button data-view="rendered" title="Switch view (Tab)">Rendered</button>
+    <button data-view="plan" title="Switch view (Tab)">Plan</button>
+  </div>
+  <div class="group">
+    <button id="btnPlay" class="play-btn" title="Walk a character with WASD or the arrow keys (P)">Play</button>
+    <button id="btnFullscreen" class="icon-btn" title="Map fills the screen (F)" aria-label="Fullscreen"></button>
+    <button id="btnHelp" class="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"></button>
+    <button id="btnInspector" class="icon-btn" title="Settings panel (Shift+\)" aria-label="Settings panel"></button>
+  </div>
+</header>
+
+<div class="workspace">
+  <nav class="rail" id="rail" aria-label="Tools"></nav>
+  <aside class="library" id="library" aria-label="Library">
+    <div class="pane-head">
+      <div class="tabs">
+        <button data-libtab="terrain">Terrain</button>
+        <button data-libtab="objects">Objects</button>
+      </div>
+      <label class="search"><span class="search-icon"></span><input id="libSearch" type="search" placeholder="Filter  ( / )" aria-label="Filter the library"></label>
+    </div>
+    <div class="pane-body" id="libBody"></div>
+  </aside>
+  <div class="viewport" id="viewport"><canvas id="display"></canvas>
+    <div class="float ctx-bar" id="contextBar"></div>
+    <div class="float scene-dock" id="sceneDock"></div>
+    <div class="float zoom-dock">
+      <button id="btnZoomOut" class="icon-btn" title="Zoom out" aria-label="Zoom out"></button>
+      <span id="zoomLabel" class="zoom-label">1×</span>
+      <button id="btnZoomIn" class="icon-btn" title="Zoom in" aria-label="Zoom in"></button>
+      <button id="btnFit" class="icon-btn" title="Fit map to screen" aria-label="Fit map to screen"></button>
+    </div>
+    <button id="btnExitFullscreen" class="exit-fullscreen" title="Exit fullscreen (F or Esc)">Exit fullscreen</button></div>
+  <aside class="inspector" id="inspector" aria-label="Settings">
+    <div class="pane-head">
+      <div class="tabs">
+        <button data-stab="scene">Scene</button>
+        <button data-stab="style">Style</button>
+        <button data-stab="colors">Colors</button>
+      </div>
+      <label class="search"><span class="search-icon"></span><input id="setSearch" type="search" placeholder="Find a setting" aria-label="Find a setting"></label>
+    </div>
+    <div class="pane-body" id="settingsSection"></div>
+  </aside>
+</div>
+
+<footer class="status">
+  <span id="statusPos"></span>
+  <span id="statusTerrain"></span>
+  <span id="statusMsg" class="status-msg"></span>
+</footer>
+
+<div class="dialog-backdrop" id="dialogRoot" hidden></div>
+<div class="command-backdrop" id="commandRoot" hidden></div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+
+<script src="js/core/random.js"></script>
+<script src="js/core/grid.js"></script>
+<script src="js/core/colors.js"></script>
+<script src="js/model/constants.js"></script>
+<script src="js/ui/prefs.js"></script>
+<script src="js/ui/icons.js"></script>
+<script src="js/model/map.js"></script>
+<script src="js/model/history.js"></script>
+<script src="js/model/generate.js"></script>
+<script src="js/model/places.js"></script>
+<script src="js/render/rivers.js"></script>
+<script src="js/render/resolve.js"></script>
+<script src="js/render/incremental.js"></script>
+<script src="js/render/characterArt.js"></script>
+<script src="js/render/villagers.js"></script>
+<script src="js/render/monsters.js"></script>
+<script src="assets/characters/elf-wizard.js"></script>
+<script src="js/render/props.js"></script>
+<script src="js/render/houseKit.js"></script>
+<script src="js/render/houses.js"></script>
+<script src="js/render/landmarks.js"></script>
+<script src="js/render/structures.js"></script>
+<script src="js/render/sprites.js"></script>
+<script src="js/render/details.js"></script>
+<script src="js/render/ground.js"></script>
+<script src="js/render/water.js"></script>
+<script src="js/render/bridges.js"></script>
+<script src="js/render/height.js"></script>
+<script src="js/render/daylight.js"></script>
+<script src="js/render/life.js"></script>
+<script src="js/render/fire.js"></script>
+<script src="js/render/weather.js"></script>
+<script src="js/render/actors.js"></script>
+<script src="js/render/characters.js"></script>
+<script src="js/render/animals.js"></script>
+<script src="js/render/tracks.js"></script>
+<script src="js/render/doors.js"></script>
+<script src="js/render/stages.js"></script>
+<script src="js/gl/context.js"></script>
+<script src="js/gl/chunks.js"></script>
+<script src="js/gl/shaders.js"></script>
+<script src="js/gl/textures.js"></script>
+<script src="js/gl/world.js"></script>
+<script src="js/gl/frame.js"></script>
+<script src="js/gl/atlas.js"></script>
+<script src="js/gl/ground.js"></script>
+<script src="js/gl/passes/static.js"></script>
+<script src="js/gl/passes/tint.js"></script>
+<script src="js/gl/passes/lights.js"></script>
+<script src="js/gl/passes/glow.js"></script>
+<script src="js/gl/passes/smoke.js"></script>
+<script src="js/gl/passes/life.js"></script>
+<script src="js/gl/passes/weather.js"></script>
+<script src="js/gl/passes/sprites.js"></script>
+<script src="js/gl/passes/water.js"></script>
+<script src="js/gl/passes/bridges.js"></script>
+<script src="js/gl/passes/tracks.js"></script>
+<script src="js/gl/passes/height.js"></script>
+<script src="js/render/renderer.js"></script>
+<script src="js/render/preview.js"></script>
+<script src="js/editor/viewport.js"></script>
+<script src="js/editor/areas.js"></script>
+<script src="js/editor/tools.js"></script>
+<script src="js/editor/overlay.js"></script>
+<script src="js/editor/tabletop.js"></script>
+<script src="js/editor/input.js"></script>
+<script src="js/editor/play.js"></script>
+<script src="js/ui/status.js"></script>
+<script src="js/ui/settings.js"></script>
+<script src="js/ui/files.js"></script>
+<script src="js/ui/thumbs.js"></script>
+<script src="js/ui/library.js"></script>
+<script src="js/ui/dock.js"></script>
+<script src="js/ui/panel.js"></script>
+<script src="js/ui/command.js"></script>
+<script src="js/ui/dialogs.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

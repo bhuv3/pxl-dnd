@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Trees Lab</title>
+<style>
+  :root {
+    --bg: #f4f3ef;
+    --panel: #ffffff;
+    --text: #1d1d1b;
+    --muted: #6b6a65;
+    --border: #e2e0d8;
+    --accent: #3f7a26;
+    --stage: #e9e7e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615;
+      --panel: #1f1f1d;
+      --text: #ecebe6;
+      --muted: #9a9890;
+      --border: #33322f;
+      --accent: #8fcc52;
+      --stage: #121211;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    height: 100vh;
+  }
+  aside {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .stage {
+    flex: 1;
+    overflow: auto;
+    background: var(--stage);
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+  canvas { image-rendering: pixelated; display: block; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  .group-label { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; margin-bottom: 12px; }
+  button {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  .seg button { padding: 6px 4px; }
+  .seg button.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  details { border-top: 1px solid var(--border); padding: 10px 0; }
+  summary { cursor: pointer; font-weight: 600; user-select: none; }
+  .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin-top: 10px; }
+  .row[hidden] { display: none; }
+  .row label { font-size: 13px; }
+  .row .val { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+  .row.check { grid-template-columns: auto 1fr; }
+  .row.check input { accent-color: var(--accent); margin: 0; }
+  .row.color input { width: 40px; height: 24px; border: 1px solid var(--border); border-radius: 4px; padding: 0; background: none; }
+  .hint { font-size: 12px; color: var(--muted); margin: 2px 0 0; grid-column: 1 / -1; }
+  .status { padding: 8px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); background: var(--panel); }
+  @media (max-width: 720px) {
+    body { flex-direction: column-reverse; height: auto; }
+    aside { width: 100%; border-right: 0; border-top: 1px solid var(--border); }
+    .stage { min-height: 50vh; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Pixel trees lab</h1>
+  <p class="sub">Trees, bushes, pines, and rocks drawn entirely by code. Change a setting and the scene redraws.</p>
+  <p class="group-label">View</p>
+  <div class="seg" id="views">
+    <button data-view="scene">Scene</button>
+    <button data-view="sheet">Sprite sheet</button>
+  </div>
+  <p class="group-label">Season</p>
+  <div class="seg" id="seasons">
+    <button data-season="summer">Summer</button>
+    <button data-season="autumn">Autumn</button>
+    <button data-season="winter">Winter</button>
+  </div>
+  <div class="buttons">
+    <button id="newSeed">New seed</button>
+    <button id="reset">Reset</button>
+    <button id="savePng">Save PNG</button>
+    <button id="copyCfg">Copy config</button>
+  </div>
+  <div id="controls"></div>
+</aside>
+<main>
+  <div class="stage"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+</main>
+
+<script>
+// ---------- Default settings ----------
+const DEFAULTS = {
+  view: 'scene',
+  season: 'summer',
+  seed: 7,
+  width: 200,
+  height: 130,
+  scale: 4,
+  sheetColumns: 6,
+
+  // How many of each thing
+  trees: 9,
+  pines: 6,
+  bushes: 10,
+  rocks: 8,
+  pebbles: 30,
+  spacing: 1,
+
+  // Round trees
+  treeSize: 9,
+  sizeVariation: 0.25,
+  treeBlobs: 5,
+  trunkHeight: 0.7,
+  trunkWidth: 3,
+  leafTexture: 0.35,
+  edgeRoughness: 0.5,
+  fruitChance: 0.3,
+
+  // Pines
+  pineSize: 7,
+  pineLayers: 4,
+  snow: false,
+
+  // Bushes
+  bushSize: 5,
+
+  // Rocks
+  rockSize: 6,
+  rockRoughness: 0.35,
+  bevel: 2,
+  cracks: true,
+  moss: 0.3,
+
+  // Light and style
+  shading: true,
+  lightAngle: 135,
+  dither: true,
+  outline: true,
+  shadows: true,
+  shadowLength: 1,
+
+  // Ground
+  grass: true,
+  grassDensity: 0.9,
+
+  // Wind
+  wind: true,
+  windStrength: 0.7,
+  windSpeed: 1.2,
+  fps: 11,
+
+  // Colors
+  canopyOutline: '#1f3d22',
+  canopyDark: '#2d5a2b',
+  canopyMid: '#3f7d32',
+  canopyLight: '#5c9e3a',
+  canopyHighlight: '#86c24a',
+  fruit: '#d94c3d',
+  trunkDark: '#4a2f1e',
+  trunkMid: '#6b4429',
+  trunkLight: '#8a5a35',
+  pineOutline: '#132b24',
+  pineDark: '#1e4535',
+  pineMid: '#2b6347',
+  pineLight: '#3f8259',
+  snowColor: '#eef4f7',
+  rockOutline: '#2e2d33',
+  rockDark: '#4f4e57',
+  rockMid: '#706f78',
+  rockLight: '#9393a0',
+  rockHighlight: '#b9b9c4',
+  mossDark: '#4d7a2a',
+  mossLight: '#78a83a',
+  groundDark: '#4b9334',
+  groundLight: '#56a13a',
+  tuftShadow: '#3a7a2e',
+  bladeRoot: '#6db544',
+  bladeMid: '#8fcc52',
+  bladeTip: '#b4e06a',
+};
+
+// A season is just a different set of colors (plus snow in winter).
+const SEASONS = {
+  summer: {
+    snow: false,
+    canopyOutline: '#1f3d22', canopyDark: '#2d5a2b', canopyMid: '#3f7d32', canopyLight: '#5c9e3a', canopyHighlight: '#86c24a',
+    fruit: '#d94c3d', mossDark: '#4d7a2a', mossLight: '#78a83a',
+    groundDark: '#4b9334', groundLight: '#56a13a', tuftShadow: '#3a7a2e',
+    bladeRoot: '#6db544', bladeMid: '#8fcc52', bladeTip: '#b4e06a',
+  },
+  autumn: {
+    snow: false,
+    canopyOutline: '#4a2414', canopyDark: '#8a3b1c', canopyMid: '#c2582a', canopyLight: '#e08a3a', canopyHighlight: '#f2c25c',
+    fruit: '#7a2a1a', mossDark: '#6f7a2a', mossLight: '#a0a83a',
+    groundDark: '#7a8a3a', groundLight: '#869744', tuftShadow: '#5f6e2c',
+    bladeRoot: '#9aaa4a', bladeMid: '#b8b85a', bladeTip: '#d6c86a',
+  },
+  winter: {
+    snow: true,
+    canopyOutline: '#1c3530', canopyDark: '#2c4f45', canopyMid: '#3f6b5c', canopyLight: '#9fb8b8', canopyHighlight: '#eef4f7',
+    fruit: '#c23b3b', mossDark: '#c9d6df', mossLight: '#eef4f7',
+    groundDark: '#dbe5ec', groundLight: '#e8eff4', tuftShadow: '#b7c6d4',
+    bladeRoot: '#b9c8d2', bladeMid: '#cfdae2', bladeTip: '#f2f7fa',
+  },
+};
+
+// ---------- Control panel layout ----------
+const inScene = () => cfg.view === 'scene';
+const inSheet = () => cfg.view === 'sheet';
+const SECTIONS = [
+  { title: 'Canvas', open: true, items: [
+    { key: 'seed', label: 'Seed', min: 0, max: 9999, step: 1 },
+    { key: 'width', label: 'Width (pixels)', min: 64, max: 400, step: 1, when: inScene },
+    { key: 'height', label: 'Height (pixels)', min: 64, max: 300, step: 1, when: inScene },
+    { key: 'sheetColumns', label: 'Variations per row', min: 1, max: 12, step: 1, when: inSheet },
+    { key: 'scale', label: 'Zoom', min: 1, max: 12, step: 1, suffix: 'x' },
+  ]},
+  { title: 'How many', open: true, items: [
+    { key: 'trees', label: 'Round trees', min: 0, max: 40, step: 1, when: inScene },
+    { key: 'pines', label: 'Pines', min: 0, max: 40, step: 1, when: inScene },
+    { key: 'bushes', label: 'Bushes', min: 0, max: 60, step: 1, when: inScene },
+    { key: 'rocks', label: 'Rocks', min: 0, max: 40, step: 1, when: inScene },
+    { key: 'pebbles', label: 'Pebbles', min: 0, max: 150, step: 1, when: inScene },
+    { key: 'spacing', label: 'Spacing', min: 0.3, max: 2, step: 0.05, when: inScene,
+      hint: 'How much room each thing keeps around itself.' },
+    { key: 'sizeVariation', label: 'Size variation', min: 0, max: 0.6, step: 0.05 },
+  ]},
+  { title: 'Round trees', open: true, items: [
+    { key: 'treeSize', label: 'Canopy radius', min: 4, max: 20, step: 1 },
+    { key: 'treeBlobs', label: 'Leaf clumps', min: 0, max: 10, step: 1,
+      hint: 'The canopy is a big circle plus this many smaller circles around it.' },
+    { key: 'trunkHeight', label: 'Trunk height', min: 0.2, max: 1.5, step: 0.05 },
+    { key: 'trunkWidth', label: 'Trunk width', min: 1, max: 6, step: 1 },
+    { key: 'leafTexture', label: 'Leaf texture', min: 0, max: 1, step: 0.05 },
+    { key: 'edgeRoughness', label: 'Edge roughness', min: 0, max: 1.5, step: 0.05 },
+    { key: 'fruitChance', label: 'Trees with fruit', min: 0, max: 1, step: 0.05 },
+  ]},
+  { title: 'Pines and bushes', items: [
+    { key: 'pineSize', label: 'Pine width', min: 3, max: 16, step: 1 },
+    { key: 'pineLayers', label: 'Pine layers', min: 2, max: 8, step: 1 },
+    { key: 'snow', label: 'Snow on pines', type: 'check' },
+    { key: 'bushSize', label: 'Bush size', min: 2, max: 12, step: 1 },
+  ]},
+  { title: 'Rocks', items: [
+    { key: 'rockSize', label: 'Rock size', min: 2, max: 16, step: 1 },
+    { key: 'rockRoughness', label: 'Roughness', min: 0, max: 0.8, step: 0.05 },
+    { key: 'bevel', label: 'Bevel width', min: 1, max: 6, step: 1,
+      hint: 'How wide the sloped sides are before the flat top.' },
+    { key: 'cracks', label: 'Cracks', type: 'check' },
+    { key: 'moss', label: 'Moss', min: 0, max: 1, step: 0.05 },
+  ]},
+  { title: 'Light and style', open: true, items: [
+    { key: 'shading', label: 'Shading', type: 'check',
+      hint: 'Turn this off to see the flat shapes before lighting.' },
+    { key: 'lightAngle', label: 'Light direction', min: 0, max: 360, step: 5, suffix: '°',
+      hint: '0 is from the right, 90 from the top, 180 from the left.' },
+    { key: 'dither', label: 'Dither between shades', type: 'check' },
+    { key: 'outline', label: 'Outline', type: 'check' },
+    { key: 'shadows', label: 'Ground shadows', type: 'check' },
+    { key: 'shadowLength', label: 'Shadow length', min: 0, max: 3, step: 0.1 },
+  ]},
+  { title: 'Ground and wind', items: [
+    { key: 'grass', label: 'Grass tufts', type: 'check' },
+    { key: 'grassDensity', label: 'Tuft density', min: 0.1, max: 6, step: 0.1 },
+    { key: 'wind', label: 'Wind sway', type: 'check' },
+    { key: 'windStrength', label: 'Wind strength', min: 0, max: 3, step: 0.1 },
+    { key: 'windSpeed', label: 'Wind speed', min: 0.1, max: 6, step: 0.1 },
+    { key: 'fps', label: 'Frames per second', min: 2, max: 30, step: 1 },
+  ]},
+  { title: 'Colors', items: [
+    ['canopyOutline', 'Canopy outline'], ['canopyDark', 'Canopy dark'], ['canopyMid', 'Canopy middle'],
+    ['canopyLight', 'Canopy light'], ['canopyHighlight', 'Canopy highlight'], ['fruit', 'Fruit'],
+    ['trunkDark', 'Trunk dark'], ['trunkMid', 'Trunk middle'], ['trunkLight', 'Trunk light'],
+    ['pineOutline', 'Pine outline'], ['pineDark', 'Pine dark'], ['pineMid', 'Pine middle'], ['pineLight', 'Pine light'],
+    ['snowColor', 'Snow'],
+    ['rockOutline', 'Rock outline'], ['rockDark', 'Rock dark'], ['rockMid', 'Rock middle'],
+    ['rockLight', 'Rock light'], ['rockHighlight', 'Rock highlight'],
+    ['mossDark', 'Moss dark'], ['mossLight', 'Moss light'],
+    ['groundDark', 'Ground dark'], ['groundLight', 'Ground light'], ['tuftShadow', 'Tuft shadow'],
+    ['bladeRoot', 'Blade root'], ['bladeMid', 'Blade middle'], ['bladeTip', 'Blade tip'],
+  ].map(([key, label]) => ({ key, label, type: 'color' })) },
+];
+
+// ---------- Settings storage ----------
+const STORAGE_KEY = 'pixel-trees-config';
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved) return { ...DEFAULTS, ...saved };
+  } catch (e) {}
+  return { ...DEFAULTS };
+}
+function saveConfig() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+let cfg = loadConfig();
+
+// ---------- Randomness (same as the other labs) ----------
+function hash(x, y) {
+  let h = (x * 374761393 + y * 668265263 + cfg.seed * 144665) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+function valueNoise(x, y, salt) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = smoothstep(x - xi), yf = smoothstep(y - yi);
+  const a = hash(xi + salt, yi), b = hash(xi + 1 + salt, yi);
+  const c = hash(xi + salt, yi + 1), d = hash(xi + 1 + salt, yi + 1);
+  const top = a + (b - a) * xf, bottom = c + (d - c) * xf;
+  return top + (bottom - top) * yf;
+}
+function noise(x, y, size, salt) {
+  return valueNoise(x / size, y / (size * 0.7), salt) * 0.7
+       + valueNoise(x / (size * 0.35) + 50, y / (size * 0.35) + 50, salt) * 0.3;
+}
+// A random number generator you can start from any seed.
+// Each sprite gets its own, so changing one count doesn't reshuffle everything else.
+function makeRng(seed) {
+  let a = seed | 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- Light ----------
+// The light direction as a vector on screen (y points down).
+function lightVector() {
+  const a = cfg.lightAngle * Math.PI / 180;
+  return { x: Math.cos(a), y: -Math.sin(a) };
+}
+
+// Turn a brightness value into one of a few colors.
+// Dithering nudges every other pixel up or down a little, so bands blend.
+function pickShade(s, x, y, ramp, thresholds) {
+  if (cfg.dither) s += ((x + y) & 1) ? 0.04 : -0.04;
+  let i = 0;
+  while (i < thresholds.length && s >= thresholds[i]) i++;
+  return ramp[i];
+}
+
+// Pixels that touch the outside of a shape are edge pixels.
+// "Selective outline": the lit side of the edge gets a dark shade, the shadow side gets the outline color.
+function markEdges(cells) {
+  for (const c of cells.values()) {
+    c.edge = !cells.has(key(c.x + 1, c.y)) || !cells.has(key(c.x - 1, c.y)) ||
+             !cells.has(key(c.x, c.y + 1)) || !cells.has(key(c.x, c.y - 1));
+  }
+}
+const key = (x, y) => x + ',' + y;
+
+// ---------- Sprite: round tree or bush ----------
+// The canopy is a few overlapping circles. Each circle is treated like a ball:
+// the side facing the light is bright, the far side is dark.
+function makeCanopy(rng, R, centerY, spreadX, spreadY, clipBottom) {
+  const L = lightVector();
+  const blobs = [{ x: 0, y: centerY, r: R }];
+  for (let i = 0; i < cfg.treeBlobs; i++) {
+    const a = rng() * Math.PI * 2, d = R * (0.35 + rng() * 0.4);
+    blobs.push({ x: Math.cos(a) * d * spreadX, y: centerY + Math.sin(a) * d * spreadY, r: R * (0.45 + rng() * 0.25) });
+  }
+  const ox = Math.floor(rng() * 1000), oy = Math.floor(rng() * 1000);
+  let minX = 0, maxX = 0, minY = 0, maxY = 0;
+  for (const b of blobs) {
+    minX = Math.min(minX, Math.floor(b.x - b.r - 2)); maxX = Math.max(maxX, Math.ceil(b.x + b.r + 2));
+    minY = Math.min(minY, Math.floor(b.y - b.r - 2)); maxY = Math.max(maxY, Math.ceil(b.y + b.r + 2));
+  }
+  const cells = new Map();
+  for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+    if (clipBottom && y > 0) continue;
+    const wobble = (valueNoise((x + ox) / 2, (y + oy) / 2, 901) - 0.5) * cfg.edgeRoughness * 3;
+    let best = 0, nx = 0, ny = 0;
+    for (const b of blobs) {
+      const dx = x - b.x, dy = y - b.y;
+      const d = Math.hypot(dx, dy) + wobble;
+      const h = 1 - (d * d) / (b.r * b.r);
+      if (h > best) { best = h; nx = dx / b.r; ny = dy / b.r; }
+    }
+    if (best <= 0) continue;
+    const nz = Math.sqrt(best);
+    // Brightness = how much this bit of "ball" faces the light, plus a bit for facing up at us.
+    let s = (nx * L.x + ny * L.y) * 0.75 + nz * 0.55;
+    s -= Math.max(0, (y - centerY) / R) * 0.2;                         // underside is darker
+    s += (valueNoise((x + ox) / 1.8, (y + oy) / 1.8, 902) - 0.5) * cfg.leafTexture;  // leafy clumps
+    cells.set(key(x, y), { x, y, s });
+  }
+  markEdges(cells);
+  return cells;
+}
+
+function makeRoundTree(rng, R) {
+  const C = colors();
+  const px = [];
+  const trunkH = Math.max(1, Math.round(R * cfg.trunkHeight));
+  const centerY = -(trunkH + R * 0.75);
+  const L = lightVector();
+
+  // Trunk: a few columns, lit on the side facing the light.
+  const tw = cfg.trunkWidth;
+  const x0 = -Math.floor(tw / 2);
+  const trunkTop = Math.round(centerY + R * 0.5);
+  for (let y = trunkTop; y <= 0; y++) {
+    for (let k = 0; k < tw; k++) {
+      const x = x0 + k;
+      const side = tw > 1 ? (k / (tw - 1)) * 2 - 1 : 0;
+      let c = C.trunkMid;
+      if (cfg.shading) {
+        const lit = side * L.x;
+        c = lit > 0.3 ? C.trunkLight : lit < -0.3 ? C.trunkDark : C.trunkMid;
+        if (hash(x * 13 + 400, y + Math.floor(rng() * 50)) < 0.12) c = C.trunkDark;  // bark marks
+        if (y < -trunkH + 2) c = C.trunkDark;  // shade right under the leaves
+      }
+      px.push({ x, y, c, w: 0 });
+    }
+  }
+  px.push({ x: x0 - 1, y: 0, c: C.trunkDark, w: 0 });   // roots
+  px.push({ x: x0 + tw, y: 0, c: C.trunkDark, w: 0 });
+
+  const hasFruit = rng() < cfg.fruitChance;
+  const cells = makeCanopy(rng, R, centerY, 1, 0.8, false);
+  addCanopyPixels(px, cells, centerY, R, hasFruit, C);
+  return { px, shadowR: R * 1.05 };
+}
+
+function makeBush(rng, R) {
+  const C = colors();
+  const px = [];
+  const centerY = -R * 0.7;
+  const cells = makeCanopy(rng, R, centerY, 1.3, 0.6, true);
+  addCanopyPixels(px, cells, centerY, R, rng() < cfg.fruitChance * 0.5, C);
+  return { px, shadowR: R * 1.2 };
+}
+
+function addCanopyPixels(px, cells, centerY, R, hasFruit, C) {
+  const ramp = [C.canopyDark, C.canopyMid, C.canopyLight, C.canopyHighlight];
+  const bottom = centerY + R;
+  for (const c of cells.values()) {
+    let color;
+    if (!cfg.shading) color = C.canopyMid;
+    else if (cfg.outline && c.edge) color = c.s > 0.45 ? C.canopyDark : C.canopyOutline;
+    else color = pickShade(c.s, c.x, c.y, ramp, [0.15, 0.45, 0.72]);
+    if (hasFruit && !c.edge && c.s > 0.2 && hash(c.x + 900, c.y + Math.floor(R * 31)) < 0.04) color = C.fruit;
+    // Higher pixels sway more in the wind.
+    const w = Math.max(0, Math.min(1, (bottom - c.y) / (R * 2)));
+    px.push({ x: c.x, y: c.y, c: color, w });
+  }
+}
+
+// ---------- Sprite: pine ----------
+// Stacked triangles, narrower toward the top. Each layer casts a shadow on the one below it.
+function makePine(rng, R) {
+  const C = colors();
+  const L = lightVector();
+  const layers = cfg.pineLayers;
+  const totalH = R * 2.6;
+  const step = totalH / layers;
+  const layerH = step * 1.6;
+  const ox = Math.floor(rng() * 1000);
+  const layerBottom = i => -3 - i * step;
+  const layerWidth = i => R * (1 - i / (layers + 0.6));
+
+  const cells = new Map();
+  const top = Math.floor(layerBottom(layers - 1) - layerH) - 1;
+  for (let y = top; y <= -2; y++) for (let x = -R - 2; x <= R + 2; x++) {
+    for (let i = layers - 1; i >= 0; i--) {     // topmost layer wins
+      const yb = layerBottom(i), yt = yb - layerH;
+      if (y < yt || y > yb) continue;
+      const t = (y - yt) / layerH;               // 0 at the layer's tip, 1 at its bottom
+      const hw = layerWidth(i) * t;
+      if (Math.abs(x) > hw) continue;
+      if (t > 0.88 && hash(x + 300, y + i * 17) < 0.4) continue;   // ragged bottom edge
+      const side = x / (hw + 0.5);
+      let s = 0.3 + side * L.x * 0.55 + (1 - t) * (-L.y) * 0.35;
+      if (i < layers - 1 && y - layerBottom(i + 1) > 0 && y - layerBottom(i + 1) <= 2) s -= 0.35;
+      s += (valueNoise((x + ox) / 1.8, y / 1.8, 903) - 0.5) * cfg.leafTexture * 0.8;
+      cells.set(key(x, y), { x, y, s, t });
+      break;
+    }
+  }
+  markEdges(cells);
+
+  const px = [];
+  // A short trunk peeks out under the lowest layer.
+  for (let y = -2; y <= 0; y++) {
+    px.push({ x: 0, y, c: C.trunkDark, w: 0 });
+    px.push({ x: -1, y, c: cfg.shading && L.x < 0 ? C.trunkMid : C.trunkDark, w: 0 });
+  }
+  const ramp = [C.pineDark, C.pineMid, C.pineLight];
+  for (const c of cells.values()) {
+    let color;
+    if (!cfg.shading) color = C.pineMid;
+    else if (cfg.outline && c.edge) color = c.s > 0.4 ? C.pineDark : C.pineOutline;
+    else color = pickShade(c.s, c.x, c.y, ramp, [0.2, 0.5]);
+    if (cfg.snow && c.t < 0.4 && c.s > 0.3) color = C.snowColor;
+    const w = Math.max(0, Math.min(1, -(c.y + 3) / totalH));
+    px.push({ x: c.x, y: c.y, c: color, w });
+  }
+  return { px, shadowR: R * 0.85 };
+}
+
+// ---------- Sprite: rock ----------
+// Same "bumpy circle" trick as the lake shape. Then a distance field gives each pixel
+// a height: 0 at the edge, rising to a flat top. The slope of that height decides the shade.
+function makeRock(rng, size, small) {
+  const C = colors();
+  const L = lightVector();
+  const rx = size, ry = Math.max(1.5, size * 0.72);
+  const ox = rng() * 100, oy = rng() * 100;
+  const minX = -Math.ceil(rx * 1.6) - 2, maxX = -minX;
+  const minY = -Math.ceil(ry * 2 * 1.4) - 2, maxY = 1;
+  const W = maxX - minX + 1, H = maxY - minY + 1;
+  const inside = new Uint8Array(W * H);
+  const idx = (x, y) => (y - minY) * W + (x - minX);
+
+  for (let y = minY; y <= 0; y++) for (let x = minX; x <= maxX; x++) {
+    const dx = x / rx, dy = (y + ry) / ry;
+    const a = Math.atan2(dy, dx);
+    const r = 1 + (valueNoise(Math.cos(a) * 1.5 + ox, Math.sin(a) * 1.5 + oy, 950) - 0.5) * 2 * cfg.rockRoughness;
+    if (Math.hypot(dx, dy) < r) inside[idx(x, y)] = 1;
+  }
+
+  // Distance from the edge, measured inside the rock (two passes, like the water lab).
+  const dist = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) dist[i] = inside[i] ? 1e9 : 0;
+  const relax = (i, x, y, cost) => {
+    if (x < minX || x > maxX || y < minY || y > maxY) { dist[i] = Math.min(dist[i], cost); return; }
+    dist[i] = Math.min(dist[i], dist[idx(x, y)] + cost);
+  };
+  for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+    const i = idx(x, y); if (!inside[i]) continue;
+    relax(i, x - 1, y, 1); relax(i, x, y - 1, 1); relax(i, x - 1, y - 1, 1.41); relax(i, x + 1, y - 1, 1.41);
+  }
+  for (let y = maxY; y >= minY; y--) for (let x = maxX; x >= minX; x--) {
+    const i = idx(x, y); if (!inside[i]) continue;
+    relax(i, x + 1, y, 1); relax(i, x, y + 1, 1); relax(i, x + 1, y + 1, 1.41); relax(i, x - 1, y + 1, 1.41);
+  }
+  const height = (x, y) => {
+    if (x < minX || x > maxX || y < minY || y > maxY) return 0;
+    return Math.min(dist[idx(x, y)], cfg.bevel) / cfg.bevel;
+  };
+
+  let topY = 0;
+  for (let y = minY; y <= 0 && topY === 0; y++) for (let x = minX; x <= maxX; x++) if (inside[idx(x, y)]) { topY = y; break; }
+  const rockH = Math.max(1, -topY);
+
+  const cells = new Map();
+  for (let y = minY; y <= 0; y++) for (let x = minX; x <= maxX; x++) {
+    if (!inside[idx(x, y)]) continue;
+    const gx = height(x + 1, y) - height(x - 1, y);
+    const gy = height(x, y + 1) - height(x, y - 1);
+    // The surface faces away from the uphill direction. Facing the light = bright.
+    let s = 0.5 - (gx * L.x + gy * L.y) * 0.9;
+    s += (1 - (y - topY) / rockH) * 0.15;                // tops catch more light
+    s -= Math.max(0, (y + ry * 0.4) / ry) * 0.2;         // bottom near the ground is darker
+    s += (valueNoise((x + ox) / 1.5, (y + oy) / 1.5, 951) - 0.5) * 0.15;
+    cells.set(key(x, y), { x, y, s, up: (y - topY) / rockH });
+  }
+  markEdges(cells);
+
+  // Cracks: a short random walk from the top edge inward. A light pixel beside it makes it look carved.
+  const crack = new Map();
+  if (cfg.cracks && !small && cells.size > 20) {
+    const edgeCells = [...cells.values()].filter(c => c.edge && c.up < 0.5);
+    const n = rng() < 0.6 ? 1 : 2;
+    for (let k = 0; k < n && edgeCells.length; k++) {
+      let { x, y } = edgeCells[Math.floor(rng() * edgeCells.length)];
+      const len = 2 + Math.floor(rng() * size * 0.8);
+      for (let s = 0; s < len; s++) {
+        y += 1;
+        x += rng() < 0.5 ? (x < 0 ? 1 : -1) : 0;
+        if (!cells.has(key(x, y)) || cells.get(key(x, y)).edge) break;
+        crack.set(key(x, y), 'dark');
+        const lx = x + (L.x < 0 ? -1 : 1);
+        if (cells.has(key(lx, y)) && !crack.has(key(lx, y))) crack.set(key(lx, y), 'light');
+      }
+    }
+  }
+
+  const ramp = [C.rockDark, C.rockMid, C.rockLight, C.rockHighlight];
+  const px = [];
+  for (const c of cells.values()) {
+    let color;
+    if (!cfg.shading) color = C.rockMid;
+    else if (cfg.outline && c.edge) color = c.s > 0.55 ? C.rockDark : C.rockOutline;
+    else color = pickShade(c.s, c.x, c.y, ramp, [0.3, 0.55, 0.8]);
+    const k = key(c.x, c.y);
+    if (cfg.shading && crack.has(k)) color = crack.get(k) === 'dark' ? C.rockOutline : C.rockHighlight;
+    // Moss grows on the top of the rock, in patches.
+    if (cfg.moss > 0 && !c.edge && c.up < 0.45 && valueNoise((c.x + ox) / 2.5, (c.y + oy) / 2.5, 952) > 1 - cfg.moss * 0.8) {
+      color = c.s > 0.55 ? C.mossLight : C.mossDark;
+    }
+    px.push({ x: c.x, y: c.y, c: color, w: 0 });
+  }
+  return { px, shadowR: small ? 0 : rx * 1.05 };
+}
+
+// ---------- Colors ----------
+let colorCache = null;
+function colors() {
+  if (colorCache) return colorCache;
+  const out = {};
+  for (const k in DEFAULTS) {
+    if (typeof cfg[k] === 'string' && cfg[k][0] === '#') {
+      out[k] = [1, 3, 5].map(i => parseInt(cfg[k].substr(i, 2), 16));
+    }
+  }
+  return colorCache = out;
+}
+
+// ---------- Build the scene (runs when a setting changes) ----------
+let scene = null;
+const KINDS = {
+  tree:   { make: makeRoundTree, size: () => cfg.treeSize, salt: 1 },
+  pine:   { make: makePine,      size: () => cfg.pineSize, salt: 2 },
+  bush:   { make: makeBush,      size: () => cfg.bushSize, salt: 3 },
+  rock:   { make: makeRock,      size: () => cfg.rockSize, salt: 4 },
+  pebble: { make: (rng, s) => makeRock(rng, s, true), size: () => 1.6, salt: 5 },
+};
+
+function makeSprite(kind, i) {
+  const k = KINDS[kind];
+  const rng = makeRng(cfg.seed * 7919 + k.salt * 100003 + i * 31);
+  const vary = kind === 'pebble' ? 0.4 : cfg.sizeVariation;
+  const size = Math.max(1.2, k.size() * (1 + (rng() - 0.5) * 2 * vary));
+  const sprite = k.make(rng, kind === 'pebble' ? size : Math.round(size));
+  sprite.kind = kind;
+  sprite.size = size;
+  let minX = 0, maxX = 0, minY = 0;
+  for (const p of sprite.px) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); }
+  sprite.box = { minX, maxX, minY };
+  sprite.phase = rng() * Math.PI * 2;
+  return sprite;
+}
+
+function buildScene() {
+  colorCache = null;
+  const things = [];
+  let W, H;
+
+  if (cfg.view === 'sheet') {
+    // One row per kind, a few variations each.
+    const rows = ['tree', 'pine', 'bush', 'rock', 'pebble'].map(kind =>
+      Array.from({ length: cfg.sheetColumns }, (_, i) => makeSprite(kind, i)));
+    let cellW = 0;
+    for (const row of rows) for (const s of row) {
+      const extra = s.shadowR * Math.max(0, cfg.shadowLength) * 0.6;
+      cellW = Math.max(cellW, s.box.maxX - s.box.minX + 8 + extra);
+    }
+    cellW = Math.ceil(cellW);
+    W = cellW * cfg.sheetColumns;
+    H = 0;
+    for (const row of rows) {
+      const rowH = Math.max(8, ...row.map(s => -s.box.minY + 8));
+      row.forEach((s, i) => {
+        s.bx = i * cellW + Math.round(cellW / 2 - (s.box.minX + s.box.maxX) / 2);
+        s.by = H + rowH - 4;
+        things.push(s);
+      });
+      H += rowH;
+    }
+  } else {
+    W = cfg.width; H = cfg.height;
+    // Try random spots; keep a spot only if it isn't crowding something already placed.
+    const placed = [];
+    const order = [['tree', cfg.trees], ['pine', cfg.pines], ['rock', cfg.rocks], ['bush', cfg.bushes], ['pebble', cfg.pebbles]];
+    for (const [kind, count] of order) {
+      for (let i = 0; i < count; i++) {
+        const s = makeSprite(kind, i);
+        const r = Math.max(1, (s.box.maxX - s.box.minX) / 2);
+        const pick = makeRng(cfg.seed * 31 + KINDS[kind].salt * 7777 + i);
+        for (let tries = 0; tries < 40; tries++) {
+          const x = Math.round(r + pick() * (W - r * 2));
+          const y = Math.round(Math.min(H - 2, -s.box.minY * 0.5 + pick() * H));
+          const crowded = placed.some(p => {
+            const need = (p.r + r) * cfg.spacing * 0.75;
+            return Math.abs(p.x - x) < need && Math.abs(p.y - y) < need * 0.6;
+          });
+          if (crowded) continue;
+          placed.push({ x, y, r });
+          s.bx = x; s.by = y;
+          things.push(s);
+          break;
+        }
+      }
+    }
+  }
+
+  // Draw back to front: things lower on screen are closer to us.
+  things.sort((a, b) => a.by - b.by);
+
+  // Grass tufts, the same as in the grass lab.
+  const tufts = [];
+  const candidates = Math.round(W * H * cfg.grassDensity / 100 * 2);
+  for (let i = 0; i < candidates; i++) {
+    const x = Math.floor(hash(i, 1) * W), y = Math.floor(hash(i, 2) * H);
+    if (hash(i, 3) * 2 > 2 * noise(x, y, 14, 1000)) continue;
+    tufts.push({ x, y, r1: hash(i, 4), r2: hash(i, 5), r3: hash(i, 6) });
+  }
+  tufts.sort((a, b) => a.y - b.y);
+
+  scene = { W, H, things, tufts };
+}
+
+// ---------- Drawing (runs every frame) ----------
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let image = null;
+let time = 0;
+
+function draw() {
+  const { W, H, things, tufts } = scene;
+  const C = colors();
+  if (canvas.width !== W || canvas.height !== H || !image) {
+    canvas.width = W; canvas.height = H;
+    image = ctx.createImageData(W, H);
+  }
+  canvas.style.width = W * cfg.scale + 'px';
+  canvas.style.height = H * cfg.scale + 'px';
+
+  const grid = new Array(W * H);
+  const put = (x, y, c) => { if (x >= 0 && x < W && y >= 0 && y < H) grid[y * W + x] = c; };
+
+  // 1. Ground with soft patches.
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    grid[y * W + x] = noise(x, y, 14, 0) < 0.42 ? C.groundDark : C.groundLight;
+  }
+
+  // 2. Grass tufts.
+  if (cfg.grass) {
+    for (const t of tufts) {
+      const sway = cfg.wind ? Math.sin(time * cfg.windSpeed * 1.3 + t.x * 0.09) * cfg.windStrength : 0;
+      for (let k = -2; k <= 2; k++) put(t.x + k, t.y + 1, C.tuftShadow);
+      const blades = [{ dx: 0, h: 3 + Math.floor(t.r1 * 3), lean: 0, c: true },
+                      { dx: -1, h: 2 + Math.floor(t.r2 * 2), lean: -2 },
+                      { dx: 1, h: 2 + Math.floor(t.r3 * 2), lean: 2 }];
+      for (const b of blades) for (let i = 0; i < b.h; i++) {
+        const f = b.h > 1 ? i / (b.h - 1) : 1;
+        put(t.x + b.dx + Math.round((b.lean + sway) * f * f), t.y - i,
+          b.c ? (f > 0.36 ? C.bladeTip : C.bladeMid) : (f > 0.36 ? C.bladeMid : C.bladeRoot));
+      }
+    }
+  }
+
+  // 3. Shadows: an oval on the ground, pushed away from the light. It darkens whatever is under it.
+  if (cfg.shadows) {
+    const L = lightVector();
+    const shade = new Uint8Array(W * H);
+    for (const s of things) {
+      if (!s.shadowR) continue;
+      const rx = s.shadowR, ry = s.shadowR * 0.38;
+      const cx = s.bx - L.x * cfg.shadowLength * rx * 0.6;
+      const cy = s.by - L.y * cfg.shadowLength * ry * 0.5;
+      for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
+        for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+          if (x < 0 || x >= W || y < 0 || y >= H) continue;
+          if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) shade[y * W + x] = 1;
+        }
+    }
+    for (let i = 0; i < W * H; i++) if (shade[i]) {
+      const c = grid[i];
+      grid[i] = [c[0] * 0.72, c[1] * 0.76, c[2] * 0.82];
+    }
+  }
+
+  // 4. Trees, bushes, and rocks, back to front. Wind shifts each row sideways;
+  //    the top of a tree moves the most, the trunk not at all.
+  for (const s of things) {
+    const sway = cfg.wind ? Math.sin(time * cfg.windSpeed + s.bx * 0.05 + s.phase * 0.3) * cfg.windStrength : 0;
+    for (const p of s.px) put(s.bx + p.x + Math.round(sway * p.w), s.by + p.y, p.c);
+  }
+
+  const data = image.data;
+  for (let i = 0; i < W * H; i++) {
+    const c = grid[i];
+    data[i * 4] = c[0]; data[i * 4 + 1] = c[1]; data[i * 4 + 2] = c[2]; data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+
+  const count = kind => things.filter(t => t.kind === kind).length;
+  document.getElementById('status').textContent =
+    `${W}×${H} pixels · ${count('tree')} trees · ${count('pine')} pines · ${count('bush')} bushes · ` +
+    `${count('rock')} rocks · ${count('pebble')} pebbles · seed ${cfg.seed}`;
+}
+
+// ---------- Animation loop ----------
+let lastFrame = 0;
+function loop(now) {
+  if (now - lastFrame >= 1000 / cfg.fps) {
+    time += Math.min(0.5, (now - lastFrame) / 1000);
+    lastFrame = now;
+    if (cfg.wind) draw();
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- Control panel ----------
+const inputs = {};
+function formatValue(item, v) {
+  if (item.step && item.step < 1) return (+v).toFixed(2).replace(/\.?0+$/, '') + (item.suffix || '');
+  return v + (item.suffix || '');
+}
+
+function buildControls() {
+  const root = document.getElementById('controls');
+  for (const section of SECTIONS) {
+    const details = document.createElement('details');
+    details.open = !!section.open;
+    details.innerHTML = `<summary>${section.title}</summary>`;
+    for (const item of section.items) {
+      const row = document.createElement('div');
+      const id = 'ctl-' + item.key;
+      if (item.type === 'check') {
+        row.className = 'row check';
+        row.innerHTML = `<input type="checkbox" id="${id}"><label for="${id}">${item.label}</label>`;
+      } else if (item.type === 'color') {
+        row.className = 'row color';
+        row.innerHTML = `<label for="${id}">${item.label}</label><input type="color" id="${id}">`;
+      } else {
+        row.className = 'row';
+        row.innerHTML = `<label for="${id}">${item.label}</label><span class="val"></span>
+          <input type="range" id="${id}" min="${item.min}" max="${item.max}" step="${item.step}">`;
+      }
+      if (item.hint) row.insertAdjacentHTML('beforeend', `<p class="hint">${item.hint}</p>`);
+      details.appendChild(row);
+
+      const input = row.querySelector('input');
+      const valEl = row.querySelector('.val');
+      inputs[item.key] = { input, valEl, item, row };
+      input.addEventListener('input', () => {
+        if (item.type === 'check') cfg[item.key] = input.checked;
+        else if (item.type === 'color') cfg[item.key] = input.value;
+        else cfg[item.key] = parseFloat(input.value);
+        if (valEl) valEl.textContent = formatValue(item, cfg[item.key]);
+        buildScene();
+        saveConfig();
+        draw();
+      });
+    }
+    root.appendChild(details);
+  }
+}
+
+function syncControls() {
+  for (const key in inputs) {
+    const { input, valEl, item, row } = inputs[key];
+    if (item.type === 'check') input.checked = cfg[key];
+    else input.value = cfg[key];
+    if (valEl) valEl.textContent = formatValue(item, cfg[key]);
+    row.hidden = item.when ? !item.when() : false;
+  }
+  document.querySelectorAll('#views button').forEach(b => b.classList.toggle('active', b.dataset.view === cfg.view));
+  document.querySelectorAll('#seasons button').forEach(b => b.classList.toggle('active', b.dataset.season === cfg.season));
+}
+
+function refresh() { syncControls(); buildScene(); saveConfig(); draw(); }
+
+document.querySelectorAll('#views button').forEach(b => b.addEventListener('click', () => {
+  cfg.view = b.dataset.view; refresh();
+}));
+document.querySelectorAll('#seasons button').forEach(b => b.addEventListener('click', () => {
+  cfg.season = b.dataset.season;
+  Object.assign(cfg, SEASONS[cfg.season]);
+  refresh();
+}));
+document.getElementById('newSeed').addEventListener('click', () => {
+  cfg.seed = Math.floor(Math.random() * 10000); refresh();
+});
+document.getElementById('reset').addEventListener('click', () => {
+  cfg = { ...DEFAULTS, view: cfg.view }; refresh();
+});
+document.getElementById('savePng').addEventListener('click', () => {
+  const out = document.createElement('canvas');
+  out.width = scene.W * cfg.scale;
+  out.height = scene.H * cfg.scale;
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(canvas, 0, 0, out.width, out.height);
+  const a = document.createElement('a');
+  a.download = `trees-${cfg.view}-seed-${cfg.seed}.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+});
+document.getElementById('copyCfg').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(cfg, null, 2));
+    btn.textContent = 'Copied';
+  } catch (err) {
+    console.log(JSON.stringify(cfg, null, 2));
+    btn.textContent = 'Logged to console';
+  }
+  setTimeout(() => { btn.textContent = 'Copy config'; }, 1500);
+});
+
+buildControls();
+refresh();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

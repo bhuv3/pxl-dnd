@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GL parity tests</title>
+<!-- Loads the editor's render modules (no editor UI, no localStorage) and the GL backend, and runs GlParity.
+     Open it through a local server (python3 serve.py in pxl-map/).
+     URL options: ?stages=water,tint  ?maps=/samples/maps/grand-arena.json,...  ?times=3.7,10  ?hours=2,23  ?set={"weather":"rain"}  ?full=0  ?audit=1 (the everything map; add &raised=0 or 1, &seasons=winter)
+     The result is window.__glResult = { done, rows, errors }. -->
+<pre id="out">running...</pre>
+<script src="../../map-editor/js/core/random.js"></script>
+<script src="../../map-editor/js/core/grid.js"></script>
+<script src="../../map-editor/js/core/colors.js"></script>
+<script src="../../map-editor/js/model/constants.js"></script>
+<script src="../../map-editor/js/model/map.js"></script>
+<script src="../../map-editor/js/render/rivers.js"></script>
+<script src="../../map-editor/js/render/resolve.js"></script>
+<script src="../../map-editor/js/render/incremental.js"></script>
+<script src="../../map-editor/js/render/characterArt.js"></script>
+<script src="../../map-editor/js/render/villagers.js"></script>
+<script src="../../map-editor/js/render/monsters.js"></script>
+<script src="../../map-editor/assets/characters/elf-wizard.js"></script>
+<script src="../../map-editor/js/render/props.js"></script>
+<script src="../../map-editor/js/render/houseKit.js"></script>
+<script src="../../map-editor/js/render/houses.js"></script>
+<script src="../../map-editor/js/render/landmarks.js"></script>
+<script src="../../map-editor/js/render/structures.js"></script>
+<script src="../../map-editor/js/render/sprites.js"></script>
+<script src="../../map-editor/js/render/details.js"></script>
+<script src="../../map-editor/js/render/ground.js"></script>
+<script src="../../map-editor/js/render/water.js"></script>
+<script src="../../map-editor/js/render/bridges.js"></script>
+<script src="../../map-editor/js/render/height.js"></script>
+<script src="../../map-editor/js/render/daylight.js"></script>
+<script src="../../map-editor/js/render/life.js"></script>
+<script src="../../map-editor/js/render/fire.js"></script>
+<script src="../../map-editor/js/render/weather.js"></script>
+<script src="../../map-editor/js/render/actors.js"></script>
+<script src="../../map-editor/js/render/characters.js"></script>
+<script src="../../map-editor/js/render/animals.js"></script>
+<script src="../../map-editor/js/render/tracks.js"></script>
+<script src="../../map-editor/js/render/doors.js"></script>
+<script src="../../map-editor/js/render/stages.js"></script>
+<script src="../../map-editor/js/gl/context.js"></script>
+<script src="../../map-editor/js/gl/chunks.js"></script>
+<script src="../../map-editor/js/gl/shaders.js"></script>
+<script src="../../map-editor/js/gl/textures.js"></script>
+<script src="../../map-editor/js/gl/world.js"></script>
+<script src="../../map-editor/js/gl/frame.js"></script>
+<script src="../../map-editor/js/gl/atlas.js"></script>
+<script src="../../map-editor/js/gl/ground.js"></script>
+<script src="../../map-editor/js/gl/passes/static.js"></script>
+<script src="../../map-editor/js/gl/passes/tint.js"></script>
+<script src="../../map-editor/js/gl/passes/lights.js"></script>
+<script src="../../map-editor/js/gl/passes/glow.js"></script>
+<script src="../../map-editor/js/gl/passes/smoke.js"></script>
+<script src="../../map-editor/js/gl/passes/life.js"></script>
+<script src="../../map-editor/js/gl/passes/weather.js"></script>
+<script src="../../map-editor/js/gl/passes/sprites.js"></script>
+<script src="../../map-editor/js/gl/passes/water.js"></script>
+<script src="../../map-editor/js/gl/passes/bridges.js"></script>
+<script src="../../map-editor/js/gl/passes/tracks.js"></script>
+<script src="../../map-editor/js/gl/passes/height.js"></script>
+<script src="parity.js"></script>
+<script src="audit.js"></script>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search), list = k => q.get(k) ? q.get(k).split(',') : undefined;
+  window.__glResult = { done: false };
+  try {
+    const options = { maps: list('maps'), names: list('stages'), times: list('times') && list('times').map(Number), hours: list('hours') && list('hours').map(Number), full: q.get('full') !== '0', settings: q.get('set') ? JSON.parse(q.get('set')) : undefined };
+    const result = q.get('audit') ? await GlAudit.run({ raised: q.get('raised') ? q.get('raised').split(',').map(v => v === '1') : undefined, seasons: list('seasons'), hours: options.hours }) : await GlParity.suite(options);
+    window.__glResult = { done: true, supported: Gl.supported(), ...result };
+  } catch (e) {
+    window.__glResult = { done: true, rows: [], errors: [{ error: String(e && e.stack || e) }] };
+  }
+  document.getElementById('out').textContent = JSON.stringify(window.__glResult, null, 1);
+})();
+</script>

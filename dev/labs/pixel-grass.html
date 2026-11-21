@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Grass Lab</title>
+<style>
+  :root {
+    --bg: #f4f3ef;
+    --panel: #ffffff;
+    --text: #1d1d1b;
+    --muted: #6b6a65;
+    --border: #e2e0d8;
+    --accent: #3f7a26;
+    --stage: #e9e7e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615;
+      --panel: #1f1f1d;
+      --text: #ecebe6;
+      --muted: #9a9890;
+      --border: #33322f;
+      --accent: #8fcc52;
+      --stage: #121211;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    height: 100vh;
+  }
+  aside {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage {
+    flex: 1;
+    overflow: auto;
+    background: var(--stage);
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+  canvas { image-rendering: pixelated; display: block; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  button {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  details { border-top: 1px solid var(--border); padding: 10px 0; }
+  summary { cursor: pointer; font-weight: 600; user-select: none; }
+  .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin-top: 10px; }
+  .row label { font-size: 13px; }
+  .row .val { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+  .row.check { grid-template-columns: auto 1fr; }
+  .row.check input { accent-color: var(--accent); margin: 0; }
+  .row.color input { width: 40px; height: 24px; border: 1px solid var(--border); border-radius: 4px; padding: 0; background: none; }
+  .hint { font-size: 12px; color: var(--muted); margin: 2px 0 0; grid-column: 1 / -1; }
+  .status { padding: 8px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); background: var(--panel); }
+  @media (max-width: 720px) {
+    body { flex-direction: column-reverse; height: auto; }
+    aside { width: 100%; border-right: 0; border-top: 1px solid var(--border); }
+    .stage { min-height: 50vh; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Pixel grass lab</h1>
+  <p class="sub">Every pixel is drawn by code. Change a setting and the grass redraws.</p>
+  <div class="buttons">
+    <button id="newSeed">New seed</button>
+    <button id="reset">Reset</button>
+    <button id="savePng">Save PNG</button>
+    <button id="copyCfg">Copy config</button>
+  </div>
+  <div id="controls"></div>
+</aside>
+<main>
+  <div class="stage" id="stage"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+</main>
+
+<script>
+// ---------- Default settings ----------
+const DEFAULTS = {
+  seed: 7,
+  width: 160,
+  height: 90,
+  scale: 5,
+
+  showPatches: true,
+  patchSize: 14,
+  patchThreshold: 0.42,
+
+  showBlades: true,
+  density: 1.8,
+  clumping: 1,
+  clumpSize: 14,
+  centerMin: 3,
+  centerMax: 5,
+  sideBlades: true,
+  sideMin: 2,
+  sideMax: 3,
+  lean: 2,
+  extraBladeChance: 0.4,
+  showShadow: true,
+  shadowWidth: 2,
+
+  showFlowers: true,
+  flowerChance: 0.1,
+
+  wind: true,
+  windStrength: 0.9,
+  windSpeed: 1.6,
+  gustSize: 11,
+  fps: 11,
+
+  groundDark: '#4b9334',
+  groundLight: '#56a13a',
+  shadow: '#3a7a2e',
+  bladeRoot: '#6db544',
+  bladeMid: '#8fcc52',
+  bladeTip: '#b4e06a',
+  flower1: '#f2e35c',
+  flower2: '#f0f0eb',
+  flower3: '#e8738a',
+};
+
+// ---------- Control panel layout ----------
+// rebuild: true means the tuft positions need to be regenerated.
+const SECTIONS = [
+  { title: 'Canvas', open: true, items: [
+    { key: 'seed', label: 'Seed', min: 0, max: 9999, step: 1, rebuild: true,
+      hint: 'Same seed always gives the same grass.' },
+    { key: 'width', label: 'Width (pixels)', min: 32, max: 400, step: 1, rebuild: true },
+    { key: 'height', label: 'Height (pixels)', min: 32, max: 300, step: 1, rebuild: true },
+    { key: 'scale', label: 'Zoom', min: 1, max: 12, step: 1, suffix: 'x',
+      hint: 'Each real pixel is drawn as a zoom × zoom square.' },
+  ]},
+  { title: 'Ground', open: true, items: [
+    { key: 'showPatches', label: 'Light and dark patches', type: 'check' },
+    { key: 'patchSize', label: 'Patch size', min: 3, max: 40, step: 1 },
+    { key: 'patchThreshold', label: 'Dark patch amount', min: 0, max: 1, step: 0.01 },
+  ]},
+  { title: 'Tufts', open: true, items: [
+    { key: 'showBlades', label: 'Draw tufts', type: 'check' },
+    { key: 'density', label: 'Density (per 100 pixels)', min: 0.1, max: 8, step: 0.1, rebuild: true },
+    { key: 'clumping', label: 'Clumping', min: 0, max: 1, step: 0.05, rebuild: true,
+      hint: '0 spreads tufts evenly. 1 groups them into thick and bare areas.' },
+    { key: 'clumpSize', label: 'Clump size', min: 3, max: 40, step: 1, rebuild: true },
+    { key: 'centerMin', label: 'Center blade min height', min: 1, max: 10, step: 1 },
+    { key: 'centerMax', label: 'Center blade max height', min: 1, max: 12, step: 1 },
+    { key: 'sideBlades', label: 'Side blades', type: 'check' },
+    { key: 'sideMin', label: 'Side blade min height', min: 1, max: 8, step: 1 },
+    { key: 'sideMax', label: 'Side blade max height', min: 1, max: 10, step: 1 },
+    { key: 'lean', label: 'Side blade lean', min: 0, max: 5, step: 0.5 },
+    { key: 'extraBladeChance', label: 'Extra blade chance', min: 0, max: 1, step: 0.05 },
+    { key: 'showShadow', label: 'Shadow under tufts', type: 'check' },
+    { key: 'shadowWidth', label: 'Shadow half-width', min: 0, max: 4, step: 1 },
+  ]},
+  { title: 'Flowers', items: [
+    { key: 'showFlowers', label: 'Draw flowers', type: 'check' },
+    { key: 'flowerChance', label: 'Flower chance per tuft', min: 0, max: 1, step: 0.01 },
+  ]},
+  { title: 'Wind', items: [
+    { key: 'wind', label: 'Animate wind', type: 'check' },
+    { key: 'windStrength', label: 'Strength (pixels)', min: 0, max: 4, step: 0.1 },
+    { key: 'windSpeed', label: 'Speed', min: 0.1, max: 6, step: 0.1 },
+    { key: 'gustSize', label: 'Gust size', min: 2, max: 60, step: 1 },
+    { key: 'fps', label: 'Frames per second', min: 2, max: 30, step: 1,
+      hint: 'Low frame rates feel more retro.' },
+  ]},
+  { title: 'Colors', items: [
+    { key: 'groundDark', label: 'Ground dark', type: 'color' },
+    { key: 'groundLight', label: 'Ground light', type: 'color' },
+    { key: 'shadow', label: 'Shadow', type: 'color' },
+    { key: 'bladeRoot', label: 'Blade root', type: 'color' },
+    { key: 'bladeMid', label: 'Blade middle', type: 'color' },
+    { key: 'bladeTip', label: 'Blade tip', type: 'color' },
+    { key: 'flower1', label: 'Flower 1', type: 'color' },
+    { key: 'flower2', label: 'Flower 2', type: 'color' },
+    { key: 'flower3', label: 'Flower 3', type: 'color' },
+  ]},
+];
+
+// ---------- Settings storage ----------
+const STORAGE_KEY = 'pixel-grass-config';
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved) return { ...DEFAULTS, ...saved };
+  } catch (e) {}
+  return { ...DEFAULTS };
+}
+function saveConfig() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+let cfg = loadConfig();
+
+// ---------- Randomness ----------
+// hash(x, y) turns a position into a "random" number between 0 and 1.
+// The same position and seed always give the same number.
+function hash(x, y) {
+  let h = (x * 374761393 + y * 668265263 + cfg.seed * 144665) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+// Smooth noise: nearby points get similar values, so it makes soft blobs.
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+function valueNoise(x, y, salt) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = smoothstep(x - xi), yf = smoothstep(y - yi);
+  const a = hash(xi + salt, yi), b = hash(xi + 1 + salt, yi);
+  const c = hash(xi + salt, yi + 1), d = hash(xi + 1 + salt, yi + 1);
+  const top = a + (b - a) * xf, bottom = c + (d - c) * xf;
+  return top + (bottom - top) * yf;
+}
+// Big blobs plus a little fine detail.
+function noise(x, y, size, salt) {
+  return valueNoise(x / size, y / (size * 0.7), salt) * 0.7
+       + valueNoise(x / (size * 0.35) + 50, y / (size * 0.35) + 50, salt) * 0.3;
+}
+
+// ---------- Tuft placement ----------
+let tufts = [];
+function buildTufts() {
+  tufts = [];
+  const pad = 6;
+  const area = (cfg.width + pad * 2) * (cfg.height + pad * 2);
+  // Clumping can double the chance in thick areas, so start with twice as many candidates.
+  const candidates = Math.round(area * cfg.density / 100 * 2);
+  for (let i = 0; i < candidates; i++) {
+    const x = Math.floor(hash(i, 1) * (cfg.width + pad * 2)) - pad;
+    const y = Math.floor(hash(i, 2) * (cfg.height + pad * 2)) - pad;
+    const n = noise(x, y, cfg.clumpSize, 1000);
+    const weight = (1 - cfg.clumping) + cfg.clumping * 2 * n;
+    if (hash(i, 3) * 2 > weight) continue;
+    tufts.push({ x, y, r1: hash(i, 4), r2: hash(i, 5), r3: hash(i, 6), r4: hash(i, 7), r5: hash(i, 8) });
+  }
+  // Draw back to front so lower tufts overlap the ones behind them.
+  tufts.sort((a, b) => a.y - b.y);
+}
+
+// ---------- Drawing ----------
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let image = null;
+let time = 0;
+
+function hexToRgb(hex) {
+  return [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16));
+}
+function between(min, max, r) {
+  const lo = Math.min(min, max), hi = Math.max(min, max);
+  return lo + Math.floor(r * (hi - lo + 1));
+}
+
+function draw() {
+  const W = cfg.width, H = cfg.height;
+  if (canvas.width !== W || canvas.height !== H || !image) {
+    canvas.width = W;
+    canvas.height = H;
+    image = ctx.createImageData(W, H);
+  }
+  canvas.style.width = W * cfg.scale + 'px';
+  canvas.style.height = H * cfg.scale + 'px';
+
+  const C = {
+    groundDark: hexToRgb(cfg.groundDark), groundLight: hexToRgb(cfg.groundLight),
+    shadow: hexToRgb(cfg.shadow), root: hexToRgb(cfg.bladeRoot),
+    mid: hexToRgb(cfg.bladeMid), tip: hexToRgb(cfg.bladeTip),
+    flowers: [hexToRgb(cfg.flower1), hexToRgb(cfg.flower2), hexToRgb(cfg.flower3)],
+  };
+
+  // The grid holds one color per pixel.
+  const grid = new Array(W * H);
+  const put = (x, y, color) => {
+    if (x >= 0 && x < W && y >= 0 && y < H) grid[y * W + x] = color;
+  };
+
+  // 1. Ground: two close greens, picked by smooth noise.
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dark = cfg.showPatches && noise(x, y, cfg.patchSize, 0) < cfg.patchThreshold;
+      grid[y * W + x] = dark ? C.groundDark : C.groundLight;
+    }
+  }
+
+  // 2. Tufts.
+  if (cfg.showBlades) {
+    for (const t of tufts) {
+      const blades = [{ dx: 0, h: between(cfg.centerMin, cfg.centerMax, t.r1), lean: 0, center: true }];
+      if (cfg.sideBlades) {
+        blades.push({ dx: -1, h: between(cfg.sideMin, cfg.sideMax, t.r2), lean: -cfg.lean });
+        blades.push({ dx: 1, h: between(cfg.sideMin, cfg.sideMax, t.r3), lean: cfg.lean });
+        if (t.r4 < cfg.extraBladeChance) blades.push({ dx: 0, h: cfg.sideMin, lean: -cfg.lean / 2 });
+      }
+
+      if (cfg.showShadow) {
+        for (let k = -cfg.shadowWidth; k <= cfg.shadowWidth; k++) put(t.x + k, t.y + 1, C.shadow);
+      }
+
+      const wind = cfg.wind
+        ? Math.sin(time * cfg.windSpeed + t.x / cfg.gustSize + t.y * 0.05) * cfg.windStrength
+        : 0;
+
+      let tipX = t.x, tipY = t.y;
+      for (const b of blades) {
+        for (let i = 0; i < b.h; i++) {
+          const f = b.h > 1 ? i / (b.h - 1) : 1;        // 0 at root, 1 at tip
+          const x = t.x + b.dx + Math.round((b.lean + wind) * f * f);
+          const upper = f > 0.36;
+          const color = b.center ? (upper ? C.tip : C.mid) : (upper ? C.mid : C.root);
+          put(x, t.y - i, color);
+          if (b.center && i === b.h - 1) { tipX = x; tipY = t.y - i; }
+        }
+      }
+
+      // 3. Flowers sit on top of the center blade.
+      if (cfg.showFlowers && t.r5 < cfg.flowerChance) {
+        put(tipX, tipY - 1, C.flowers[Math.floor(t.r2 * 3)]);
+      }
+    }
+  }
+
+  // Copy the grid into the canvas.
+  const data = image.data;
+  for (let i = 0; i < W * H; i++) {
+    const c = grid[i];
+    data[i * 4] = c[0]; data[i * 4 + 1] = c[1]; data[i * 4 + 2] = c[2]; data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+
+  document.getElementById('status').textContent =
+    `${W}×${H} pixels · ${tufts.length} tufts · seed ${cfg.seed}`;
+}
+
+// ---------- Animation loop ----------
+let lastFrame = 0;
+function loop(now) {
+  if (cfg.wind && now - lastFrame >= 1000 / cfg.fps) {
+    time += (now - lastFrame) / 1000;
+    lastFrame = now;
+    draw();
+  } else if (!cfg.wind) {
+    lastFrame = now;
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- Control panel ----------
+const inputs = {};
+function formatValue(item, v) {
+  if (item.step && item.step < 1) return (+v).toFixed(2).replace(/\.?0+$/, '') + (item.suffix || '');
+  return v + (item.suffix || '');
+}
+
+function buildControls() {
+  const root = document.getElementById('controls');
+  for (const section of SECTIONS) {
+    const details = document.createElement('details');
+    details.open = !!section.open;
+    details.innerHTML = `<summary>${section.title}</summary>`;
+    for (const item of section.items) {
+      const row = document.createElement('div');
+      const id = 'ctl-' + item.key;
+      if (item.type === 'check') {
+        row.className = 'row check';
+        row.innerHTML = `<input type="checkbox" id="${id}"><label for="${id}">${item.label}</label>`;
+      } else if (item.type === 'color') {
+        row.className = 'row color';
+        row.innerHTML = `<label for="${id}">${item.label}</label><input type="color" id="${id}">`;
+      } else {
+        row.className = 'row';
+        row.innerHTML = `<label for="${id}">${item.label}</label><span class="val"></span>
+          <input type="range" id="${id}" min="${item.min}" max="${item.max}" step="${item.step}">`;
+      }
+      if (item.hint) row.insertAdjacentHTML('beforeend', `<p class="hint">${item.hint}</p>`);
+      details.appendChild(row);
+
+      const input = row.querySelector('input');
+      const valEl = row.querySelector('.val');
+      inputs[item.key] = { input, valEl, item };
+      input.addEventListener('input', () => {
+        if (item.type === 'check') cfg[item.key] = input.checked;
+        else if (item.type === 'color') cfg[item.key] = input.value;
+        else cfg[item.key] = parseFloat(input.value);
+        if (valEl) valEl.textContent = formatValue(item, cfg[item.key]);
+        if (item.rebuild) buildTufts();
+        saveConfig();
+        draw();
+      });
+    }
+    root.appendChild(details);
+  }
+}
+
+function syncControls() {
+  for (const key in inputs) {
+    const { input, valEl, item } = inputs[key];
+    if (item.type === 'check') input.checked = cfg[key];
+    else input.value = cfg[key];
+    if (valEl) valEl.textContent = formatValue(item, cfg[key]);
+  }
+}
+
+document.getElementById('newSeed').addEventListener('click', () => {
+  cfg.seed = Math.floor(Math.random() * 10000);
+  syncControls(); buildTufts(); saveConfig(); draw();
+});
+document.getElementById('reset').addEventListener('click', () => {
+  cfg = { ...DEFAULTS };
+  syncControls(); buildTufts(); saveConfig(); draw();
+});
+document.getElementById('savePng').addEventListener('click', () => {
+  // Export at the current zoom, keeping pixels sharp.
+  const out = document.createElement('canvas');
+  out.width = cfg.width * cfg.scale;
+  out.height = cfg.height * cfg.scale;
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(canvas, 0, 0, out.width, out.height);
+  const a = document.createElement('a');
+  a.download = `grass-seed-${cfg.seed}.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+});
+document.getElementById('copyCfg').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(cfg, null, 2));
+    btn.textContent = 'Copied';
+  } catch (err) {
+    console.log(JSON.stringify(cfg, null, 2));
+    btn.textContent = 'Logged to console';
+  }
+  setTimeout(() => { btn.textContent = 'Copy config'; }, 1500);
+});
+
+buildControls();
+syncControls();
+buildTufts();
+draw();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
